@@ -8,17 +8,14 @@ export function createSeatsForLongStand(bodyMesh, side, cfg = {}) {
   const seatRows = cfg.seatRows ?? 18;
 
   const xSpacing = cfg.xSpacing ?? 1.05;
-  const zSpacing = cfg.zSpacing ?? 0.65; // ✅ pak ma e theksume, ma stadium-like
-  const yStep = cfg.yStep ?? 0.55;       // ✅ rritet pak, me u pa tier-at
+  const zSpacing = cfg.zSpacing ?? 0.65;
+  const yStep = cfg.yStep ?? 0.55;
 
-  // vijat e verdha (aisles)
   const aisleCols = cfg.aisleCols ?? [12, 28, 44, 60];
 
-  // hapje në mes (hyrje)
   const midGap = cfg.midGap ?? null;
   const midGapAuto = cfg.midGapAuto ?? true;
 
-  // ✅ ndarje sektorësh (gap vertikal) – p.sh. çdo 20 kolona, lë 1 kolonë bosh
   const sectorEvery = cfg.sectorEvery ?? 20;
   const sectorGapCols = cfg.sectorGapCols ?? 1;
 
@@ -28,7 +25,6 @@ export function createSeatsForLongStand(bodyMesh, side, cfg = {}) {
   const seatBaseGeo = new THREE.BoxGeometry(0.9, 0.45, 0.9);
   const seatBackGeo = new THREE.BoxGeometry(0.9, 0.75, 0.2);
 
-  // bounding box (punon me ExtrudeGeometry)
   bodyMesh.geometry.computeBoundingBox();
   const bb = bodyMesh.geometry.boundingBox;
   const size = new THREE.Vector3();
@@ -37,7 +33,6 @@ export function createSeatsForLongStand(bodyMesh, side, cfg = {}) {
   const standXLen = size.x;
   const standD = size.z;
 
-  // AUTO cols
   const edgePaddingX = cfg.edgePaddingX ?? 2;
   const seatCols =
     cfg.seatCols ??
@@ -51,26 +46,35 @@ export function createSeatsForLongStand(bodyMesh, side, cfg = {}) {
   baseBlue.castShadow = baseBlue.receiveShadow = true;
   backBlue.castShadow = backBlue.receiveShadow = true;
 
-  // ✅ mos u “cull” prej kamerës
   baseBlue.frustumCulled = false;
   backBlue.frustumCulled = false;
 
   const dummy = new THREE.Object3D();
   const dummyBack = new THREE.Object3D();
 
-  // north = -Z, south = +Z
+  // north = -Z (tribuna në -Z), south = +Z
   const zDir = side === "north" ? -1 : 1;
 
   // fillimi në X
   const startX = -standXLen / 2 + edgePaddingX;
 
-  // skaji kah fusha
-  const pitchEdgeZ = bodyMesh.position.z - zDir * (standD / 2);
+  // ==============================
+  // ✅ GJEJ SKAJIN KAH FUSHA (robust)
+  // Provo dy skajet: local +Z dhe local -Z
+  // Zgjedh atë që në WORLD është më afër qendrës së fushës (z më afër 0)
+  // ==============================
+  const edgeA = new THREE.Vector3(0, 0, +standD / 2);
+  const edgeB = new THREE.Vector3(0, 0, -standD / 2);
 
-  // vendosi pak “brenda tribunës” (jo jashtë)
+  bodyMesh.localToWorld(edgeA);
+  bodyMesh.localToWorld(edgeB);
+
+  const pitchEdgeZ = Math.abs(edgeA.z) < Math.abs(edgeB.z) ? edgeA.z : edgeB.z;
+
+  // vendosi pak “brenda tribunës” (jo jashtë) në drejtim të kundërt të rreshtave
   const startZ = pitchEdgeZ + (-zDir) * 0.15;
 
-  // ✅ midGap auto në mes
+  // midGap auto
   const gap = midGap
     ? midGap
     : midGapAuto
@@ -80,31 +84,23 @@ export function createSeatsForLongStand(bodyMesh, side, cfg = {}) {
       }
     : null;
 
-  // ✅ ROTATION: gjithmonë me shiku kah fusha
-  // - north: fusha është kah +Z, pra karrigia duhet me shiku kah +Z => rotY = 0
-  // - south: fusha është kah -Z, pra rotY = Math.PI
+  // karriget gjithmonë kah fusha
   const seatRotY = side === "north" ? 0 : Math.PI;
 
   let bi = 0;
 
   for (let r = 0; r < seatRows; r++) {
     for (let c = 0; c < seatCols; c++) {
-      // aisles
       if (aisleCols.includes(c)) continue;
-
-      // mid gap (hyrja)
       if (gap && c >= gap.fromCol && c <= gap.toCol) continue;
 
-      // ✅ sector gaps (ndarje blloqesh)
       if (sectorEvery > 0) {
         const mod = c % sectorEvery;
         if (mod >= 0 && mod < sectorGapCols) continue;
       }
 
-      // tiers
       const y = 1.8 + r * yStep;
 
-      // pozicion
       const x = startX + c * xSpacing;
       const z = startZ + zDir * (r * zSpacing);
 
@@ -112,7 +108,6 @@ export function createSeatsForLongStand(bodyMesh, side, cfg = {}) {
       dummy.rotation.y = seatRotY;
       dummy.updateMatrix();
 
-      // backrest pak mbrapa (larg fushe)
       dummyBack.position.set(x, y + 0.55, z + zDir * 0.38);
       dummyBack.rotation.y = seatRotY;
       dummyBack.updateMatrix();
@@ -133,11 +128,12 @@ export function createSeatsForLongStand(bodyMesh, side, cfg = {}) {
 
   // --------- Aisles të verdha ----------
   const aisleWidth = cfg.aisleWidth ?? 0.7;
-  const aisleLen = cfg.aisleLen ?? (seatRows * zSpacing + 2.5);
+  const aisleLen = cfg.aisleLen ?? seatRows * zSpacing + 2.5;
   const aisleGeo = new THREE.PlaneGeometry(aisleWidth, aisleLen);
 
   aisleCols.forEach((colIdx) => {
     if (colIdx < 0 || colIdx >= seatCols) return;
+
     const x = startX + colIdx * xSpacing;
     const zMid = startZ + zDir * (aisleLen / 2 - 1);
 
@@ -148,7 +144,6 @@ export function createSeatsForLongStand(bodyMesh, side, cfg = {}) {
     group.add(aisle);
   });
 
-  // shirit i verdhë në hyrjen e mesit
   if (gap) {
     const midWidth = (gap.toCol - gap.fromCol + 1) * xSpacing;
     const midGeo = new THREE.PlaneGeometry(midWidth, aisleLen);

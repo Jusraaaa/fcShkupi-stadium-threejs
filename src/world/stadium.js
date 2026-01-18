@@ -1,13 +1,21 @@
 // src/world/stadium.js
 import * as THREE from "three";
 import { createSeatsForLongStand } from "./seats";
+import { createGoals } from "./goals";
+import { createPitchLines } from "./pitchLines";
 
-export function createStadium() {
+
+
+
+
+export async function createStadium() 
+ {
   const stadium = new THREE.Group();
   stadium.name = "ChairStadium";
 
-  const pitchW = 101;
-  const pitchD = 68;
+  const pitchW = 105;
+   const pitchD = 68;
+
 
   const margin = 18;
   const standH = 14;
@@ -51,13 +59,14 @@ export function createStadium() {
   pitch.receiveShadow = true;
   stadium.add(pitch);
 
+ stadium.add(createPitchLines(pitchW, pitchD));
+stadium.add(createGoals(pitchW, pitchD));
+
+
   // =========================
-  // TRIBUNAT WEDGE + KARRIGET
+  // TRIBUNAT PA "PARENT GROUP"
   // =========================
   function buildLongStand(side = "north") {
-    const g = new THREE.Group();
-    g.name = `LongStand_${side}`;
-
     const zDir = side === "north" ? -1 : 1;
 
     // Wedge shape (Z,Y)
@@ -79,62 +88,65 @@ export function createStadium() {
 
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
     const body = new THREE.Mesh(bodyGeo, bodyMat);
+    body.name = `StandBody_${side}`;
     body.castShadow = true;
     body.receiveShadow = true;
 
+    // body në world (jo në group)
     body.position.set(
       0,
       standH / 2,
       zDir * (pitchD / 2 + standGapFromPitch + standD / 2)
     );
 
-    g.add(body);
-
-    // ✅ KARRIGET (AUTO-FIT në gjithë gjatësinë)
+    // ✅ KARRIGET (lidhen te body, por shtohen direkt në stadium)
     const seats = createSeatsForLongStand(body, side, {
       seatRows: 18,
-      // seatCols: mos e jep! le të llogaritet vet
       xSpacing: 1.05,
       zSpacing: 0.55,
-
-      // vija te verdha (nëse ndonjë bie jashtë, seats.js e injoron)
       aisleCols: [12, 28, 44, 60],
-
-      // hyrja në mes (opsionale; nëse e heq, seats.js e bën auto)
-      // midGap: { fromCol: 33, toCol: 37 },
-
       edgePaddingX: 2,
       midGapAuto: true,
     });
-
-    g.add(seats);
+    seats.name = `Seats_${side}`;
 
     // ROOF
     const roofGeo = new THREE.BoxGeometry(standXLen + 10, 0.7, standD + 3);
     const roofMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
     const roof = new THREE.Mesh(roofGeo, roofMat);
+    roof.name = `Roof_${side}`;
     roof.castShadow = true;
     roof.receiveShadow = true;
     roof.position.set(0, standH + 6.5, body.position.z + zDir * 1.4);
-    g.add(roof);
 
-    // BEAMS
+    // BEAMS (i mbajmë në një group të vogël vetëm për lehtësi, s’ndikon në seats)
+    const beams = new THREE.Group();
+    beams.name = `Beams_${side}`;
+
     const beamGeo = new THREE.CylinderGeometry(0.08, 0.08, standD + 6, 10);
     const beamMat = new THREE.MeshStandardMaterial({ color: 0x111827 });
+
     for (let i = -5; i <= 5; i++) {
       const beam = new THREE.Mesh(beamGeo, beamMat);
       beam.rotation.z = Math.PI / 2;
       beam.position.set(i * 10, roof.position.y - 0.4, roof.position.z);
-      g.add(beam);
+      beams.add(beam);
     }
 
-    return g;
+    return { body, seats, roof, beams };
   }
 
-  stadium.add(buildLongStand("north"));
-  stadium.add(buildLongStand("south"));
+  // Shto dy tribunat direkt në stadium
+  const north = buildLongStand("north");
+  stadium.add(north.body, north.seats, north.roof, north.beams);
 
+  const south = buildLongStand("south");
+  
+  stadium.add(south.body, south.seats, south.roof, south.beams);
+
+  // =========================
   // FUNDET (mure)
+  // =========================
   const endWallMat = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
   const endWallGeo = new THREE.BoxGeometry(1.2, 3, pitchD + margin * 2 + 6);
 
@@ -150,7 +162,9 @@ export function createStadium() {
   wallRight.receiveShadow = true;
   stadium.add(wallRight);
 
+  // =========================
   // RRUGA
+  // =========================
   const roadGeo = new THREE.PlaneGeometry(pitchW + margin * 2 + 55, 10);
   const roadMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b });
   const road = new THREE.Mesh(roadGeo, roadMat);

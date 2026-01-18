@@ -5,6 +5,8 @@ import renderer from "./core/renderer.js";
 import { setupResize } from "./utils/resize.js";
 import { createStadium } from "./world/stadium.js";
 
+
+
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as THREE from "three";
 
@@ -18,8 +20,11 @@ dir.castShadow = true;
 scene.add(dir);
 
 // Stadium
-const stadium = createStadium();
-scene.add(stadium);
+createStadium().then((stadium) => {
+  scene.add(stadium);
+
+  
+});
 
 // Orbit Controls ✅
 const controls = new OrbitControls(camera, renderer.domElement);
