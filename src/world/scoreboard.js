@@ -12,16 +12,24 @@ export function createScoreboard(pitchW, pitchD) {
   const ctx = canvas.getContext("2d");
 
   const tex = new THREE.CanvasTexture(canvas);
-  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
 
-  const screenMat = new THREE.MeshStandardMaterial({
+  // stable filtering (no shimmering blocks)
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+
+  // Screen material (LED): not affected by lights, only visible from front
+  const screenMat = new THREE.MeshBasicMaterial({
     map: tex,
-    emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: 1.6,
-    roughness: 0.35,
-    metalness: 0.05,
-    side: THREE.DoubleSide,
+    toneMapped: false,
+    side: THREE.FrontSide,
   });
+
+  // ✅ Z-fighting killer
+  screenMat.polygonOffset = true;
+  screenMat.polygonOffsetFactor = -2;
+  screenMat.polygonOffsetUnits = -2;
 
   const frameMat = new THREE.MeshStandardMaterial({
     color: 0x111111,
@@ -30,32 +38,55 @@ export function createScoreboard(pitchW, pitchD) {
     side: THREE.DoubleSide,
   });
 
-  // Screen + frame
+  // ---- Geometry ----
   const screenGeo = new THREE.PlaneGeometry(14, 3.6);
   const screen = new THREE.Mesh(screenGeo, screenMat);
   screen.name = "ScoreboardScreen";
-  screen.castShadow = true;
-  screen.receiveShadow = true;
+  screen.castShadow = false;
+  screen.receiveShadow = false;
+
+  // pull screen slightly forward
+  screen.position.z = 0.36;
 
   const frameGeo = new THREE.BoxGeometry(15.2, 4.6, 0.7);
   const frame = new THREE.Mesh(frameGeo, frameMat);
   frame.name = "ScoreboardFrame";
-  frame.position.z = -0.35;
+
+  // push frame backward
+  frame.position.z = -0.6;
   frame.castShadow = true;
   frame.receiveShadow = true;
 
-  // make sure it shows nicely
-  screen.renderOrder = 10;
-  screen.material.depthWrite = false;
-
   group.add(screen, frame);
 
-  // small glow like a real LED panel
-  const glow = new THREE.PointLight(0xffffff, 0.6, 25);
-  glow.position.set(0, 0, 1.5);
+  // ---- Back cover (mbyll pjesën e pasme, e ngjitur saktë) ----
+  const frameDepth = frameGeo.parameters.depth; // 0.7
+
+  const backGeo = new THREE.PlaneGeometry(14, 3.6);
+  const backMat = new THREE.MeshStandardMaterial({
+    color: 0x0b0b0b,
+    roughness: 0.9,
+    metalness: 0.05,
+    side: THREE.FrontSide,
+  });
+
+  const backCover = new THREE.Mesh(backGeo, backMat);
+
+  // vendose fiks në faqen e pasme të frame-it
+  backCover.position.z = frame.position.z - frameDepth / 2 - 0.01;
+  backCover.rotation.y = Math.PI;
+
+  backCover.castShadow = true;
+  backCover.receiveShadow = true;
+
+  group.add(backCover);
+
+  // Optional glow (nice at night)
+  const glow = new THREE.PointLight(0xffffff, 0.45, 25);
+  glow.position.set(0, 0, 1.8);
   group.add(glow);
 
-  // Poles
+  // ---- Poles ----
   const poleGeo = new THREE.CylinderGeometry(0.22, 0.22, 7, 16);
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
 
@@ -69,13 +100,13 @@ export function createScoreboard(pitchW, pitchD) {
 
   group.add(poleL, poleR);
 
-  // Position behind north goal, facing pitch
+  // Position behind goal, facing pitch
   group.position.set(0, 10.2, -(pitchD / 2 + 7));
   group.lookAt(0, 10, 0);
 
-  // ---- Data / Modes ----
+  // ---- State ----
   const state = {
-    mode: 3, // 0 logo, 1 score/time, 2 GOAL, 3 STATIC
+    mode: 0, // 0 LOGO, 1 SCORE, 2 GOAL
     home: "FC SHKUPI",
     away: "GUEST",
     homeScore: 1,
@@ -93,79 +124,62 @@ export function createScoreboard(pitchW, pitchD) {
     draw();
   };
 
+  // ---- Canvas helpers ----
+  function beginFrame() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
   function drawBackground() {
-    // LED-like dark background
+    beginFrame();
+
     ctx.fillStyle = "#05070a";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // subtle grid
-    ctx.globalAlpha = 0.15;
-    ctx.fillStyle = "#0b1220";
-    for (let x = 0; x < canvas.width; x += 10) ctx.fillRect(x, 0, 1, canvas.height);
-    for (let y = 0; y < canvas.height; y += 10) ctx.fillRect(0, y, canvas.width, 1);
-    ctx.globalAlpha = 1;
-  }
+    const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, "rgba(255,255,255,0.06)");
+    g.addColorStop(1, "rgba(0,0,0,0.25)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  function drawStatic() {
-    // TV noise
-    const imgData = ctx.createImageData(canvas.width, canvas.height);
-    const d = imgData.data;
-
-    for (let i = 0; i < d.length; i += 4) {
-      const v = Math.random() * 255;
-      d[i] = v;
-      d[i + 1] = v;
-      d[i + 2] = v;
-      d[i + 3] = 255;
-    }
-    ctx.putImageData(imgData, 0, 0);
-
-    // scanlines (VHS-ish)
-    ctx.globalAlpha = 0.18;
-    ctx.fillStyle = "#000000";
+    // subtle scanlines
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = "#000";
     for (let y = 0; y < canvas.height; y += 4) {
       ctx.fillRect(0, y, canvas.width, 1);
     }
     ctx.globalAlpha = 1;
+  }
 
-    // overlay text
-    ctx.fillStyle = "rgba(0,0,0,0.45)";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  function drawHeader() {
+    ctx.fillStyle = "#0b1220";
+    ctx.fillRect(0, 0, canvas.width, 56);
 
     ctx.fillStyle = "#e5e7eb";
-    ctx.font = "bold 64px Arial";
-    ctx.fillText("NO SIGNAL", 330, 140);
-
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "28px Arial";
-    ctx.fillText("Click to change mode", 360, 195);
-
-    // little random "glitch bar"
-    const barY = 40 + Math.floor(Math.random() * 160);
-    ctx.globalAlpha = 0.5;
-    ctx.fillStyle = "#0ea5e9";
-    ctx.fillRect(0, barY, canvas.width, 6);
-    ctx.globalAlpha = 1;
+    ctx.font = "bold 34px Arial";
+    ctx.fillText("FC SHKUPI STADIUM", 30, 40);
   }
 
   function drawLogo() {
     drawBackground();
-
-    ctx.fillStyle = "#e5e7eb";
-    ctx.font = "bold 46px Arial";
-    ctx.fillText("FC SHKUPI STADIUM", 40, 70);
+    drawHeader();
 
     if (state.logoImg) {
-      ctx.drawImage(state.logoImg, canvas.width - 260, 30, 220, 220);
+      ctx.drawImage(state.logoImg, canvas.width - 240, 18, 210, 210);
     }
 
     ctx.fillStyle = "#94a3b8";
     ctx.font = "28px Arial";
-    ctx.fillText("Click to toggle modes", 40, 140);
+    ctx.fillText("Click to change mode", 30, 120);
 
     ctx.fillStyle = "#60a5fa";
     ctx.font = "22px Arial";
-    ctx.fillText("Press G for GOAL", 40, 175);
+    ctx.fillText("Press G for GOAL", 30, 155);
+
+    tex.needsUpdate = true;
   }
 
   function formatTime(totalSeconds) {
@@ -176,92 +190,97 @@ export function createScoreboard(pitchW, pitchD) {
 
   function drawScore() {
     drawBackground();
+    drawHeader();
 
     ctx.fillStyle = "#e5e7eb";
-    ctx.font = "bold 40px Arial";
-    ctx.fillText(state.home, 40, 80);
-    ctx.fillText(state.away, 40, 160);
+    ctx.font = "bold 34px Arial";
+    ctx.fillText(state.home, 40, 110);
+    ctx.fillText(state.away, 40, 185);
 
     ctx.fillStyle = "#22c55e";
     ctx.font = "bold 90px Arial";
-    ctx.fillText(`${state.homeScore}`, 650, 110);
+    ctx.fillText(`${state.homeScore}`, 660, 145);
 
     ctx.fillStyle = "#f97316";
-    ctx.fillText(`${state.awayScore}`, 820, 110);
+    ctx.fillText(`${state.awayScore}`, 840, 145);
 
     ctx.fillStyle = "#e5e7eb";
     ctx.font = "bold 70px Arial";
-    ctx.fillText("-", 750, 110);
+    ctx.fillText("-", 770, 145);
 
     ctx.fillStyle = "#60a5fa";
-    ctx.font = "bold 50px Arial";
-    ctx.fillText(formatTime(state.seconds), 750, 210);
+    ctx.font = "bold 46px Arial";
+    ctx.fillText(formatTime(state.seconds), 740, 225);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "24px Arial";
+    ctx.fillText("Click to change mode", 40, 240);
+
+    tex.needsUpdate = true;
   }
 
   function drawGoal() {
     drawBackground();
+    drawHeader();
 
     const pulse = 0.5 + 0.5 * Math.sin(state.blink);
     ctx.globalAlpha = 0.6 + pulse * 0.4;
 
     ctx.fillStyle = "#facc15";
     ctx.font = "bold 120px Arial";
-    ctx.fillText("GOAL!", 280, 150);
+    ctx.fillText("GOAL!", 300, 175);
 
     ctx.globalAlpha = 1;
 
     ctx.fillStyle = "#e5e7eb";
-    ctx.font = "bold 44px Arial";
+    ctx.font = "bold 34px Arial";
     ctx.fillText(
       `${state.home} ${state.homeScore} - ${state.awayScore} ${state.away}`,
-      160,
-      230
+      170,
+      235
     );
+
+    tex.needsUpdate = true;
   }
 
   function draw() {
     if (state.mode === 0) drawLogo();
     else if (state.mode === 1) drawScore();
-    else if (state.mode === 2) drawGoal();
-    else drawStatic();
-
-    tex.needsUpdate = true;
+    else drawGoal();
   }
 
   // initial draw
   draw();
 
-  // API for outside
-  group.userData = {
-    clickable: [screen, frame],
-    toggleMode: () => {
-      state.mode = (state.mode + 1) % 4; // ✅ tani 4 modes
-      draw();
-    },
-    goalFlash: () => {
-      state.mode = 2;
-      state.blink = 0;
-      draw();
-    },
-    setMode: (m) => {
-      state.mode = m;
-      draw();
-    },
-    setScore: (h, a) => {
-      state.homeScore = h;
-      state.awayScore = a;
-      draw();
-    },
-    update: (dt) => {
-      state.seconds += dt;
-      state.blink += dt * 10.0;
+  // ---- API ----
+  group.userData.clickable = [screen, frame];
 
-      // LED flicker
-      screenMat.emissiveIntensity = 1.45 + 0.25 * Math.sin(state.blink * 0.8);
+  group.userData.toggleMode = () => {
+    state.mode = (state.mode + 1) % 3;
+    draw();
+  };
 
-      // animate GOAL + STATIC
-      if (state.mode === 2 || state.mode === 3) draw();
-    },
+  group.userData.goalFlash = () => {
+    state.mode = 2;
+    state.blink = 0;
+    draw();
+  };
+
+  group.userData.setScore = (h, a) => {
+    state.homeScore = h;
+    state.awayScore = a;
+    draw();
+  };
+
+  group.userData.update = (dt) => {
+    state.seconds += dt;
+    state.blink += dt * 10.0;
+
+    // subtle glow animation
+    glow.intensity = 0.4 + 0.12 * Math.sin(state.blink * 0.8);
+
+    // only GOAL needs continuous redraw
+    if (state.mode === 2) draw();
   };
 
   return group;

@@ -1,11 +1,11 @@
 // src/world/stadium.js
 import * as THREE from "three";
-import { createSeatsForLongStand } from "./seats";
-import { createGoals } from "./goals";
-import { createPitchLines } from "./pitchLines";
-import { createScoreboard } from "./scoreboard";
-import { loadGLTF } from "./models";
-
+import { createSeatsForLongStand } from "./seats.js";
+import { createGoals } from "./goals.js";
+import { createPitchLines } from "./pitchLines.js";
+import { createScoreboard } from "./scoreboard.js";
+import { loadGLTF } from "./models.js";
+import { createFloodlights } from "./floodlights.js";
 
 export async function createStadium() {
   const stadium = new THREE.Group();
@@ -59,15 +59,12 @@ export async function createStadium() {
   stadium.add(createPitchLines(pitchW, pitchD));
   stadium.add(createGoals(pitchW, pitchD));
 
-    // =========================
-  // SCOREBOARD (LED + Click Modes)
+  // =========================
+  // SCOREBOARD
   // =========================
   const scoreboard = createScoreboard(pitchW, pitchD);
   stadium.add(scoreboard);
-
-  // ruaje referencën që me e përdor main.js (update + click)
   stadium.userData.scoreboard = scoreboard;
-
 
   // =========================
   // TRIBUNAT (LONG SIDES)
@@ -91,7 +88,6 @@ export async function createStadium() {
     bodyGeo.rotateY(-Math.PI / 2);
     bodyGeo.center();
 
-    // DoubleSide që mos me pas probleme me “zhdukje” prej anës
     const bodyMat = new THREE.MeshStandardMaterial({
       color: 0x2a2a2a,
       side: THREE.DoubleSide,
@@ -102,9 +98,7 @@ export async function createStadium() {
     body.castShadow = true;
     body.receiveShadow = true;
 
-    // ✅ orientimi i saktë i tribunës kah fusha
-body.rotation.y = side === "north" ? Math.PI : 0;
-
+    body.rotation.y = side === "north" ? Math.PI : 0;
 
     body.position.set(
       0,
@@ -158,43 +152,22 @@ body.rotation.y = side === "north" ? Math.PI : 0;
   const south = buildLongStand("south");
   stadium.add(south.body, south.seats, south.roof, south.beams);
 
+  // =========================
+  // FLOODLIGHTS (procedural) - më afër fushës + më nalt
+  // =========================
+  const floods = createFloodlights({ pitchW, pitchD });
 
-    // =========================
-  // IMPORT MODELS: Floodlights + Dugouts
+  // afroj pak kah fusha dhe ngre pak
+  floods.position.y = 0; // vet kullat e kanë lartësinë e vet
+  stadium.add(floods);
+
+  stadium.userData.floodlights = floods;
+  floods.userData.setOn(false);
+
+  // =========================
+  // MODELS: Dugouts vetëm
   // =========================
   try {
-    const flood = await loadGLTF("/models/floodlight.glb");
-    flood.traverse((o) => {
-      if (o.isMesh) {
-        o.castShadow = true;
-        o.receiveShadow = true;
-      }
-    });
-
-    const positions = [
-      [-70, 0, -50],
-      [ 70, 0, -50],
-      [-70, 0,  50],
-      [ 70, 0,  50],
-    ];
-
-    positions.forEach(([x, y, z]) => {
-      const f = flood.clone(true);
-      f.position.set(x, y, z);
-      f.scale.set(6, 6, 6);
-      stadium.add(f);
-
-      // SpotLight afër çdo floodlight (lighting + shadows)
-      const spot = new THREE.SpotLight(0xffffff, 1.6, 260, Math.PI / 7, 0.35, 1);
-      spot.position.set(x, 35, z);
-      spot.target.position.set(0, 0, 0);
-      spot.castShadow = true;
-      spot.shadow.mapSize.width = 1024;
-      spot.shadow.mapSize.height = 1024;
-      stadium.add(spot);
-      stadium.add(spot.target);
-    });
-
     const dugout = await loadGLTF("/models/dugout.glb");
     dugout.traverse((o) => {
       if (o.isMesh) {
@@ -203,7 +176,6 @@ body.rotation.y = side === "north" ? Math.PI : 0;
       }
     });
 
-    // 2 dugouts near midfield
     const d1 = dugout.clone(true);
     d1.position.set(0, 0, pitchD / 2 + 6);
     d1.rotation.y = Math.PI;
@@ -215,11 +187,9 @@ body.rotation.y = side === "north" ? Math.PI : 0;
     d2.rotation.y = 0;
     d2.scale.set(3.5, 3.5, 3.5);
     stadium.add(d2);
-
   } catch (e) {
     console.warn("Model load failed:", e);
   }
-
 
   // =========================
   // FUNDET (mure)
