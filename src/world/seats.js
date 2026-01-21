@@ -33,6 +33,10 @@ export function createSeatsForLongStand(bodyMesh, side, cfg = {}) {
   const standXLen = size.x;
   const standD = size.z;
 
+    // ✅ shumë me rëndësi: sigurohu që matrixWorld është e freskët
+  bodyMesh.updateWorldMatrix(true, false);
+
+
   const edgePaddingX = cfg.edgePaddingX ?? 2;
   const seatCols =
     cfg.seatCols ??

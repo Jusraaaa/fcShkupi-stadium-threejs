@@ -5,11 +5,13 @@ export function createPitchLines(pitchW = 105, pitchD = 68) {
   const g = new THREE.Group();
   g.name = "PitchLines";
 
-  // MeshBasicMaterial = vijat duken gjithmonë (pa u varë prej dritave)
-  const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+  const lineMat = new THREE.MeshBasicMaterial({
+    color: 0xffffff,
+    side: THREE.DoubleSide,
+  });
 
-  const y = 0.012;     // pak mbi pitch që mos me "z-fight"
-  const lineW = 0.10;  // trashësi vize pak ma e dukshme
+  const y = 0.012;
+  const lineW = 0.10;
 
   function rectOutline(w, d, xOff = 0, zOff = 0) {
     const group = new THREE.Group();
@@ -45,40 +47,40 @@ export function createPitchLines(pitchW = 105, pitchD = 68) {
     return m;
   }
 
-  // ✅ Outer boundary
+  // Outer boundary
   g.add(rectOutline(pitchW, pitchD));
 
-  // ✅ Mid line
+  // Mid line
   const midLine = new THREE.Mesh(new THREE.PlaneGeometry(lineW, pitchD), lineMat);
   midLine.rotation.x = -Math.PI / 2;
   midLine.position.set(0, y, 0);
   g.add(midLine);
 
-  // ✅ Center circle + spot
+  // Center circle + spot
   g.add(ring(9.15));
   const centerSpot = new THREE.Mesh(new THREE.CircleGeometry(0.22, 32), lineMat);
   centerSpot.rotation.x = -Math.PI / 2;
   centerSpot.position.y = y;
   g.add(centerSpot);
 
-  // ✅ Boxes (FIFA)
+  // FIFA boxes
   const goalBoxDepth = 5.5;
-  const goalBoxW = 7.32 + 2 * 5.5;    // 18.32
+  const goalBoxW = 7.32 + 2 * 5.5; // 18.32
   const penBoxDepth = 16.5;
-  const penBoxW = 7.32 + 2 * 16.5;    // 40.32
+  const penBoxW = 7.32 + 2 * 16.5; // 40.32
 
   const leftX = -pitchW / 2;
   const rightX = pitchW / 2;
 
-  // Left side boxes
+  // Left boxes
   g.add(rectOutline(goalBoxDepth, goalBoxW, leftX + goalBoxDepth / 2, 0));
   g.add(rectOutline(penBoxDepth, penBoxW, leftX + penBoxDepth / 2, 0));
 
-  // Right side boxes
+  // Right boxes
   g.add(rectOutline(goalBoxDepth, goalBoxW, rightX - goalBoxDepth / 2, 0));
   g.add(rectOutline(penBoxDepth, penBoxW, rightX - penBoxDepth / 2, 0));
 
-  // ✅ Penalty spots (11m nga goal line)
+  // Penalty spots (11m from goal line)
   const penSpotGeo = new THREE.CircleGeometry(0.22, 32);
 
   const leftPen = new THREE.Mesh(penSpotGeo, lineMat);
@@ -91,14 +93,27 @@ export function createPitchLines(pitchW = 105, pitchD = 68) {
   rightPen.position.set(rightX - 11, y, 0);
   g.add(rightPen);
 
-  // ✅ Penalty arcs (vetëm gjysma jashtë pen box)
-  // Majtas: duam gjysmën NË DREJTIM të qendrës (pra +X) => theta -90..+90
-  // Djathtas: duam gjysmën NË DREJTIM të qendrës (pra -X) => theta +90..+270
+  // ✅ Penalty arcs: ONLY the part outside the penalty box
+  // Radius = 9.15, box edge is 16.5m from goal line.
+  // Pen spot is 11m from goal line => distance from spot to box edge = 5.5m.
   function penaltyArc(xCenter, side) {
     const r = 9.15;
+    const dxToBoxEdge = 5.5;
 
-    const thetaStart = side === "left" ? -Math.PI / 2 : Math.PI / 2;
-    const thetaLen = Math.PI;
+    // angle where circle hits the box edge line
+    const theta = Math.acos(dxToBoxEdge / r); // ~0.925rad (53°)
+
+    let thetaStart, thetaLen;
+
+    if (side === "left") {
+      // outside box is towards +X, so arc around angle 0
+      thetaStart = -theta;
+      thetaLen = 2 * theta;
+    } else {
+      // right side: outside box is towards -X, around angle PI
+      thetaStart = Math.PI - theta;
+      thetaLen = 2 * theta;
+    }
 
     const geo = new THREE.RingGeometry(
       r - lineW / 2,

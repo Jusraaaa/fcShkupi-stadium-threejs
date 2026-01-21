@@ -3,26 +3,23 @@ import * as THREE from "three";
 import { createSeatsForLongStand } from "./seats";
 import { createGoals } from "./goals";
 import { createPitchLines } from "./pitchLines";
+import { createScoreboard } from "./scoreboard";
+import { loadGLTF } from "./models";
 
 
-
-
-
-export async function createStadium() 
- {
+export async function createStadium() {
   const stadium = new THREE.Group();
   stadium.name = "ChairStadium";
 
   const pitchW = 105;
-   const pitchD = 68;
-
+  const pitchD = 68;
 
   const margin = 18;
   const standH = 14;
 
   const standXLen = pitchW + 12;
-  const standD = 13;
-  const standGapFromPitch = 10;
+  const standD = 15;
+  const standGapFromPitch = 7;
 
   // =========================
   // TOKA
@@ -59,17 +56,25 @@ export async function createStadium()
   pitch.receiveShadow = true;
   stadium.add(pitch);
 
- stadium.add(createPitchLines(pitchW, pitchD));
-stadium.add(createGoals(pitchW, pitchD));
+  stadium.add(createPitchLines(pitchW, pitchD));
+  stadium.add(createGoals(pitchW, pitchD));
+
+    // =========================
+  // SCOREBOARD (LED + Click Modes)
+  // =========================
+  const scoreboard = createScoreboard(pitchW, pitchD);
+  stadium.add(scoreboard);
+
+  // ruaje referencën që me e përdor main.js (update + click)
+  stadium.userData.scoreboard = scoreboard;
 
 
   // =========================
-  // TRIBUNAT PA "PARENT GROUP"
+  // TRIBUNAT (LONG SIDES)
   // =========================
   function buildLongStand(side = "north") {
     const zDir = side === "north" ? -1 : 1;
 
-    // Wedge shape (Z,Y)
     const standShape = new THREE.Shape();
     standShape.moveTo(0, 0);
     standShape.lineTo(standD, 0);
@@ -86,20 +91,27 @@ stadium.add(createGoals(pitchW, pitchD));
     bodyGeo.rotateY(-Math.PI / 2);
     bodyGeo.center();
 
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
+    // DoubleSide që mos me pas probleme me “zhdukje” prej anës
+    const bodyMat = new THREE.MeshStandardMaterial({
+      color: 0x2a2a2a,
+      side: THREE.DoubleSide,
+    });
+
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.name = `StandBody_${side}`;
     body.castShadow = true;
     body.receiveShadow = true;
 
-    // body në world (jo në group)
+    // ✅ orientimi i saktë i tribunës kah fusha
+body.rotation.y = side === "north" ? Math.PI : 0;
+
+
     body.position.set(
       0,
       standH / 2,
       zDir * (pitchD / 2 + standGapFromPitch + standD / 2)
     );
 
-    // ✅ KARRIGET (lidhen te body, por shtohen direkt në stadium)
     const seats = createSeatsForLongStand(body, side, {
       seatRows: 18,
       xSpacing: 1.05,
@@ -110,21 +122,25 @@ stadium.add(createGoals(pitchW, pitchD));
     });
     seats.name = `Seats_${side}`;
 
-    // ROOF
     const roofGeo = new THREE.BoxGeometry(standXLen + 10, 0.7, standD + 3);
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0x0f172a });
+    const roofMat = new THREE.MeshStandardMaterial({
+      color: 0x0f172a,
+      side: THREE.DoubleSide,
+    });
     const roof = new THREE.Mesh(roofGeo, roofMat);
     roof.name = `Roof_${side}`;
     roof.castShadow = true;
     roof.receiveShadow = true;
     roof.position.set(0, standH + 6.5, body.position.z + zDir * 1.4);
 
-    // BEAMS (i mbajmë në një group të vogël vetëm për lehtësi, s’ndikon në seats)
     const beams = new THREE.Group();
     beams.name = `Beams_${side}`;
 
     const beamGeo = new THREE.CylinderGeometry(0.08, 0.08, standD + 6, 10);
-    const beamMat = new THREE.MeshStandardMaterial({ color: 0x111827 });
+    const beamMat = new THREE.MeshStandardMaterial({
+      color: 0x111827,
+      side: THREE.DoubleSide,
+    });
 
     for (let i = -5; i <= 5; i++) {
       const beam = new THREE.Mesh(beamGeo, beamMat);
@@ -136,13 +152,74 @@ stadium.add(createGoals(pitchW, pitchD));
     return { body, seats, roof, beams };
   }
 
-  // Shto dy tribunat direkt në stadium
   const north = buildLongStand("north");
   stadium.add(north.body, north.seats, north.roof, north.beams);
 
   const south = buildLongStand("south");
-  
   stadium.add(south.body, south.seats, south.roof, south.beams);
+
+
+    // =========================
+  // IMPORT MODELS: Floodlights + Dugouts
+  // =========================
+  try {
+    const flood = await loadGLTF("/models/floodlight.glb");
+    flood.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
+
+    const positions = [
+      [-70, 0, -50],
+      [ 70, 0, -50],
+      [-70, 0,  50],
+      [ 70, 0,  50],
+    ];
+
+    positions.forEach(([x, y, z]) => {
+      const f = flood.clone(true);
+      f.position.set(x, y, z);
+      f.scale.set(6, 6, 6);
+      stadium.add(f);
+
+      // SpotLight afër çdo floodlight (lighting + shadows)
+      const spot = new THREE.SpotLight(0xffffff, 1.6, 260, Math.PI / 7, 0.35, 1);
+      spot.position.set(x, 35, z);
+      spot.target.position.set(0, 0, 0);
+      spot.castShadow = true;
+      spot.shadow.mapSize.width = 1024;
+      spot.shadow.mapSize.height = 1024;
+      stadium.add(spot);
+      stadium.add(spot.target);
+    });
+
+    const dugout = await loadGLTF("/models/dugout.glb");
+    dugout.traverse((o) => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
+
+    // 2 dugouts near midfield
+    const d1 = dugout.clone(true);
+    d1.position.set(0, 0, pitchD / 2 + 6);
+    d1.rotation.y = Math.PI;
+    d1.scale.set(3.5, 3.5, 3.5);
+    stadium.add(d1);
+
+    const d2 = dugout.clone(true);
+    d2.position.set(0, 0, -(pitchD / 2 + 6));
+    d2.rotation.y = 0;
+    d2.scale.set(3.5, 3.5, 3.5);
+    stadium.add(d2);
+
+  } catch (e) {
+    console.warn("Model load failed:", e);
+  }
+
 
   // =========================
   // FUNDET (mure)
