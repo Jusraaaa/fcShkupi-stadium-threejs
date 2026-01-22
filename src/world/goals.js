@@ -4,9 +4,10 @@ export function createGoals(pitchW = 105) {
   const group = new THREE.Group();
   group.name = "Goals";
 
-  const goalW = 7.32;
-  const goalH = 2.44;
-  const goalDepth = 2.2;
+  // Madhësitë që po i përdor ti
+  const goalW = 10.32;
+  const goalH = 4.44;
+  const goalDepth = 2.8;
   const postR = 0.06;
 
   const whiteMat = new THREE.MeshStandardMaterial({
@@ -15,20 +16,47 @@ export function createGoals(pitchW = 105) {
     metalness: 0.05,
   });
 
-  const netMat = new THREE.MeshStandardMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0.18,
-    roughness: 1,
-    metalness: 0,
-    side: THREE.DoubleSide,
-  });
+  // =========================
+  // ✅ NET TEXTURES (PATH OK)
+  // =========================
+  const loader = new THREE.TextureLoader();
+
+  const netColor = loader.load("/textures/goals/net_color.png");
+  const netAlpha = loader.load("/textures/goals/net_alpha.png");
+
+  // për Vite/Three: Color texture në sRGB
+  netColor.colorSpace = THREE.SRGBColorSpace;
+
+  // shpesh textures dalin të përmbysura
+  netColor.flipY = false;
+  netAlpha.flipY = false;
+
+  // Repeat për katrorë më të vegjël
+  netColor.wrapS = netColor.wrapT = THREE.RepeatWrapping;
+  netAlpha.wrapS = netAlpha.wrapT = THREE.RepeatWrapping;
+
+  netColor.repeat.set(3, 2.2);
+  netAlpha.repeat.copy(netColor.repeat);
+
+  // ✅ rrjeta e bardhë “FORCE WHITE”
+const netMat = new THREE.MeshBasicMaterial({
+  alphaMap: netAlpha,     // përdor vetëm transparencën
+  transparent: true,
+  opacity: 1,
+  alphaTest: 0.05,
+  side: THREE.DoubleSide,
+  color: 0xffffff,        // e bardhë
+  depthWrite: false,
+
+});
+
 
   function oneGoal(xPos) {
     const g = new THREE.Group();
 
-    const postGeo = new THREE.CylinderGeometry(postR, postR, goalH, 16);
-    const barGeo = new THREE.CylinderGeometry(postR, postR, goalW, 16);
+    // Posts + crossbar
+    const postGeo = new THREE.CylinderGeometry(postR, postR, goalH, 20);
+    const barGeo = new THREE.CylinderGeometry(postR, postR, goalW, 20);
 
     const leftPost = new THREE.Mesh(postGeo, whiteMat);
     leftPost.position.set(-goalW / 2, goalH / 2, 0);
@@ -47,23 +75,51 @@ export function createGoals(pitchW = 105) {
 
     g.add(leftPost, rightPost, crossbar);
 
-    const backNet = new THREE.Mesh(new THREE.PlaneGeometry(goalW, goalH), netMat);
+    // ✅ NET (plane meshes)
+    const backNet = new THREE.Mesh(
+      new THREE.PlaneGeometry(goalW, goalH, 20, 12),
+      netMat
+    );
     backNet.position.set(0, goalH / 2, -goalDepth);
 
-    const leftNet = new THREE.Mesh(new THREE.PlaneGeometry(goalDepth, goalH), netMat);
+    const leftNet = new THREE.Mesh(
+      new THREE.PlaneGeometry(goalDepth, goalH, 12, 12),
+      netMat
+    );
     leftNet.rotation.y = Math.PI / 2;
     leftNet.position.set(-goalW / 2, goalH / 2, -goalDepth / 2);
 
-    const rightNet = new THREE.Mesh(new THREE.PlaneGeometry(goalDepth, goalH), netMat);
+    const rightNet = new THREE.Mesh(
+      new THREE.PlaneGeometry(goalDepth, goalH, 12, 12),
+      netMat
+    );
     rightNet.rotation.y = -Math.PI / 2;
     rightNet.position.set(goalW / 2, goalH / 2, -goalDepth / 2);
 
-    const topNet = new THREE.Mesh(new THREE.PlaneGeometry(goalW, goalDepth), netMat);
+    const topNet = new THREE.Mesh(
+      new THREE.PlaneGeometry(goalW, goalDepth, 20, 12),
+      netMat
+    );
     topNet.rotation.x = -Math.PI / 2;
     topNet.position.set(0, goalH, -goalDepth / 2);
 
+    // ✅ “Sag” i lehtë në backNet (ma reale)
+    const pos = backNet.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+
+      const nx = x / (goalW / 2);
+      const ny = (y - goalH / 2) / (goalH / 2);
+
+      const centerPull = 1 - Math.min(1, Math.sqrt(nx * nx + ny * ny));
+      pos.setZ(i, pos.getZ(i) - 0.25 * centerPull);
+    }
+    pos.needsUpdate = true;
+
     g.add(backNet, leftNet, rightNet, topNet);
 
+    // Pozicioni/rotacioni si e kishe
     g.position.set(xPos, 0, 0);
     g.rotation.y = xPos > 0 ? -Math.PI / 2 : Math.PI / 2;
 
