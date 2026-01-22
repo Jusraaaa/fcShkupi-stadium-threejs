@@ -1,5 +1,7 @@
 // src/world/stadium.js
 import * as THREE from "three";
+import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
+
 import { createSeatsForLongStand } from "./seats.js";
 import { createGoals } from "./goals.js";
 import { createPitchLines } from "./pitchLines.js";
@@ -11,6 +13,13 @@ export async function createStadium() {
   const stadium = new THREE.Group();
   stadium.name = "ChairStadium";
 
+  // =========================
+  // TOGGLES (TRUE/FALSE)
+  // =========================
+  const USE_STAND_TEXTURE = true; // tribuna concrete
+  const USE_PITCH_TEXTURE = true;  // bari në fushë
+  const USE_ROOF_TEXTURE = true;   // corrugated metal në çati
+
   const pitchW = 105;
   const pitchD = 68;
 
@@ -20,6 +29,127 @@ export async function createStadium() {
   const standXLen = pitchW + 12;
   const standD = 15;
   const standGapFromPitch = 7;
+
+  // =========================
+  // LOADERS
+  // =========================
+  const texLoader = new THREE.TextureLoader();
+  const exrLoader = new EXRLoader();
+
+  const loadTex = (url, opts = {}) =>
+    new Promise((resolve, reject) => {
+      texLoader.load(
+        url,
+        (t) => {
+          if (opts.wrap) {
+            t.wrapS = t.wrapT = THREE.RepeatWrapping;
+          }
+          if (opts.repeat) {
+            t.repeat.set(opts.repeat[0], opts.repeat[1]);
+          }
+          if (opts.colorSpace) {
+            t.colorSpace = opts.colorSpace;
+          }
+          if (opts.anisotropy) {
+            t.anisotropy = opts.anisotropy;
+          }
+          resolve(t);
+        },
+        undefined,
+        reject
+      );
+    });
+
+  const loadEXR = (url, opts = {}) =>
+    new Promise((resolve, reject) => {
+      exrLoader.load(
+        url,
+        (t) => {
+          if (opts.wrap) {
+            t.wrapS = t.wrapT = THREE.RepeatWrapping;
+          }
+          if (opts.repeat) {
+            t.repeat.set(opts.repeat[0], opts.repeat[1]);
+          }
+          // EXR maps zakonisht janë data-maps -> mos SRGB
+          t.colorSpace = THREE.NoColorSpace;
+
+          if (opts.anisotropy) {
+            t.anisotropy = opts.anisotropy;
+          }
+          resolve(t);
+        },
+        undefined,
+        reject
+      );
+    });
+
+  // =========================
+  // TEXTURES (ngarko 1 herë)
+  // =========================
+  // Stand concrete (ti e ke 4k — ok, veç s’është super light)
+  const concrete = await loadTex("/textures/stand/brushed_concrete_2_diff_4k.jpg", {
+    wrap: true,
+    repeat: [6, 2],
+    colorSpace: THREE.SRGBColorSpace,
+    anisotropy: 2,
+  });
+
+ // =========================
+// PITCH (GRASS) — LOAD DIRECT (NO AWAIT)
+// =========================
+let grassMap = null, grassNormal = null, grassRough = null;
+
+if (USE_PITCH_TEXTURE) {
+  grassMap = texLoader.load("/textures/pitch/grass_diff.jpg");
+  grassMap.wrapS = grassMap.wrapT = THREE.RepeatWrapping;
+  grassMap.repeat.set(10, 6);
+  grassMap.colorSpace = THREE.SRGBColorSpace;
+  grassMap.anisotropy = 4;
+  grassMap.needsUpdate = true;
+
+
+  grassNormal = texLoader.load("/textures/pitch/grass_normal.jpg");
+grassNormal.wrapS = grassNormal.wrapT = THREE.RepeatWrapping;
+grassNormal.repeat.set(10, 6);
+grassNormal.colorSpace = THREE.NoColorSpace;
+
+grassRough = texLoader.load("/textures/pitch/grass_rough.jpg");
+grassRough.wrapS = grassRough.wrapT = THREE.RepeatWrapping;
+grassRough.repeat.set(10, 6);
+grassRough.colorSpace = THREE.NoColorSpace;
+
+}
+
+
+  // Roof (corrugated) — diff JPG, maps EXR
+  let roofDiff = null, roofNormal = null, roofRough = null, roofMetal = null;
+  if (USE_ROOF_TEXTURE) {
+    roofDiff = await loadTex("/textures/roof/roof_diff.jpg", {
+      wrap: true,
+      repeat: [8, 2],
+      colorSpace: THREE.SRGBColorSpace,
+      anisotropy: 4,
+    });
+
+    roofNormal = await loadEXR("/textures/roof/roof_normal.exr", {
+      wrap: true,
+      repeat: [8, 2],
+      anisotropy: 2,
+    });
+
+    roofRough = await loadEXR("/textures/roof/roof_rough.exr", {
+      wrap: true,
+      repeat: [8, 2],
+      anisotropy: 2,
+    });
+
+    roofMetal = await loadEXR("/textures/roof/roof_metal.exr", {
+      wrap: true,
+      repeat: [8, 2],
+      anisotropy: 2,
+    });
+  }
 
   // =========================
   // TOKA
@@ -47,11 +177,21 @@ export async function createStadium() {
   stadium.add(border);
 
   // =========================
-  // FUSHA
+  // FUSHA (PITCH)
   // =========================
   const pitchGeo = new THREE.PlaneGeometry(pitchW, pitchD);
-  const pitchMat = new THREE.MeshStandardMaterial({ color: 0x1f6b3a });
+
+  const pitchMat = USE_PITCH_TEXTURE
+  ? new THREE.MeshStandardMaterial({
+      map: grassMap,
+      roughness: 1.0,
+      metalness: 0.0,
+    })
+  : new THREE.MeshStandardMaterial({ color: 0x1f6b3a });
+
   const pitch = new THREE.Mesh(pitchGeo, pitchMat);
+  pitchMat.needsUpdate = true;
+
   pitch.rotation.x = -Math.PI / 2;
   pitch.receiveShadow = true;
   stadium.add(pitch);
@@ -88,10 +228,20 @@ export async function createStadium() {
     bodyGeo.rotateY(-Math.PI / 2);
     bodyGeo.center();
 
-    const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0x2a2a2a,
-      side: THREE.DoubleSide,
-    });
+    // ✅ MATERIALI i tribunës (toggle)
+    const bodyMat = USE_STAND_TEXTURE
+      ? new THREE.MeshStandardMaterial({
+          map: concrete,
+          roughness: 0.9,
+          metalness: 0.0,
+          side: THREE.DoubleSide,
+        })
+      : new THREE.MeshStandardMaterial({
+          color: 0x2a2a2a,
+          roughness: 0.95,
+          metalness: 0.0,
+          side: THREE.DoubleSide,
+        });
 
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.name = `StandBody_${side}`;
@@ -106,35 +256,115 @@ export async function createStadium() {
       zDir * (pitchD / 2 + standGapFromPitch + standD / 2)
     );
 
+    // =========================
+    // KARRIGET – CHILD I BODY
+    // =========================
     const seats = createSeatsForLongStand(body, side, {
-      seatRows: 18,
-      xSpacing: 1.05,
-      zSpacing: 0.55,
+      seatRows: 14,
+      xSpacing: 1.6,
+      zSpacing: 1.0,
+
       aisleCols: [12, 28, 44, 60],
       edgePaddingX: 2,
       midGapAuto: true,
-    });
-    seats.name = `Seats_${side}`;
 
-    const roofGeo = new THREE.BoxGeometry(standXLen + 10, 0.7, standD + 3);
-    const roofMat = new THREE.MeshStandardMaterial({
-      color: 0x0f172a,
-      side: THREE.DoubleSide,
+      standH: standH,
+      standD: standD,
+      standFrontY: 2.6,
+
+      edgeInsetZ: 1.3,
+      zNudge: -0.6,
+      baseLift: 0.02,
+      slopeScale: 1.0,
+      seatClearance: 0.3,
     });
+
+    seats.name = `Seats_${side}`;
+    body.add(seats);
+
+    // =========================
+    // ÇATIA (roof) — LOCAL
+    // =========================
+    const roofGeo = new THREE.BoxGeometry(standXLen + 10, 0.7, standD + 3);
+
+    const roofMat = USE_ROOF_TEXTURE
+  ? new THREE.MeshStandardMaterial({
+      map: roofDiff,
+      roughness: 0.6,
+      metalness: 0.2,
+      side: THREE.DoubleSide,
+    })
+  : new THREE.MeshStandardMaterial({ color: 0x1b2333, roughness: 0.35, metalness: 0.65, side: THREE.DoubleSide });
+
+
+
     const roof = new THREE.Mesh(roofGeo, roofMat);
     roof.name = `Roof_${side}`;
     roof.castShadow = true;
     roof.receiveShadow = true;
-    roof.position.set(0, standH + 6.5, body.position.z + zDir * 1.4);
 
+    const roofY = standH / 2 + 6.5;
+    const roofZLocal = standD / 2 + 2.4; // ✅ fix: gjithmonë mbrapa në LOCAL
+
+    roof.position.set(0, roofY, roofZLocal);
+    body.add(roof);
+
+    // =========================
+    // SUPPORTS / SHTYLLAT — te roof-i
+    // =========================
+    const supports = new THREE.Group();
+    supports.name = `Supports_${side}`;
+
+    const postMat = new THREE.MeshStandardMaterial({
+  color: 0x2b2f36,
+  roughness: 0.22,
+  metalness: 1.0,
+});
+
+
+
+    const postCount = 8;
+    const xMin = -(standXLen / 2) + 2;
+    const xMax = standXLen / 2 - 2;
+
+    const supportZ = roof.position.z;
+
+    const bottomY = -standH / 2 + 0.2;
+    const topY = roof.position.y - 0.3;
+    const postH = Math.max(0.2, topY - bottomY);
+
+    const postGeo = new THREE.CylinderGeometry(0.22, 0.22, postH, 12);
+
+
+    for (let i = 0; i < postCount; i++) {
+      const t = postCount === 1 ? 0.5 : i / (postCount - 1);
+      const x = xMin + t * (xMax - xMin);
+
+      const post = new THREE.Mesh(postGeo, postMat);
+      post.position.set(x, bottomY + postH / 2, supportZ);
+      post.castShadow = true;
+      post.receiveShadow = true;
+
+      supports.add(post);
+    }
+
+    body.add(supports);
+
+    // =========================
+    // TRARET
+    // =========================
     const beams = new THREE.Group();
     beams.name = `Beams_${side}`;
 
-    const beamGeo = new THREE.CylinderGeometry(0.08, 0.08, standD + 6, 10);
+    const beamGeo = new THREE.CylinderGeometry(0.12, 0.12, standD + 6, 12);
+
     const beamMat = new THREE.MeshStandardMaterial({
-      color: 0x111827,
-      side: THREE.DoubleSide,
-    });
+  color: 0x3a3f46,
+  roughness: 0.18,
+  metalness: 1.0,
+});
+
+
 
     for (let i = -5; i <= 5; i++) {
       const beam = new THREE.Mesh(beamGeo, beamMat);
@@ -143,29 +373,26 @@ export async function createStadium() {
       beams.add(beam);
     }
 
-    return { body, seats, roof, beams };
+    return { body, roof, beams };
   }
 
   const north = buildLongStand("north");
-  stadium.add(north.body, north.seats, north.roof, north.beams);
+  stadium.add(north.body);
 
   const south = buildLongStand("south");
-  stadium.add(south.body, south.seats, south.roof, south.beams);
+  stadium.add(south.body);
 
   // =========================
-  // FLOODLIGHTS (procedural) - më afër fushës + më nalt
+  // FLOODLIGHTS
   // =========================
   const floods = createFloodlights({ pitchW, pitchD });
-
-  // afroj pak kah fusha dhe ngre pak
-  floods.position.y = 0; // vet kullat e kanë lartësinë e vet
+  floods.position.y = 0;
   stadium.add(floods);
-
   stadium.userData.floodlights = floods;
   floods.userData.setOn(false);
 
   // =========================
-  // MODELS: Dugouts vetëm
+  // MODELS – Dugouts
   // =========================
   try {
     const dugout = await loadGLTF("/models/dugout.glb");
@@ -184,7 +411,6 @@ export async function createStadium() {
 
     const d2 = dugout.clone(true);
     d2.position.set(0, 0, -(pitchD / 2 + 6));
-    d2.rotation.y = 0;
     d2.scale.set(3.5, 3.5, 3.5);
     stadium.add(d2);
   } catch (e) {
@@ -192,7 +418,7 @@ export async function createStadium() {
   }
 
   // =========================
-  // FUNDET (mure)
+  // FUNDET (MURE)
   // =========================
   const endWallMat = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
   const endWallGeo = new THREE.BoxGeometry(1.2, 3, pitchD + margin * 2 + 6);
@@ -220,5 +446,6 @@ export async function createStadium() {
   road.receiveShadow = true;
   stadium.add(road);
 
+  
   return stadium;
 }

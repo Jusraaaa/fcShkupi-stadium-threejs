@@ -4,6 +4,8 @@ import camera from "./core/camera.js";
 import renderer from "./core/renderer.js";
 import { setupResize } from "./utils/resize.js";
 import { createStadium } from "./world/stadium.js";
+import { setupLights } from "./world/lights.js";
+
 
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as THREE from "three";
@@ -22,6 +24,9 @@ dir.shadow.mapSize.height = 1024;
 scene.add(dir);
 
 let isNight = false;
+
+setupLights(scene);
+
 
 // --------------------
 // Controls
