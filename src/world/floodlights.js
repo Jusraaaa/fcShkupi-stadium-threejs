@@ -18,7 +18,8 @@ export function createFloodlights({ pitchW = 105, pitchD = 68 } = {}) {
 
   const poleGeo = new THREE.CylinderGeometry(0.5, 0.75, towerH, 18);
 
-  function makeTower(signX, signZ) {
+  // ✅ root = g (që target-at të jenë në world, mos me u rrotullu me kullën)
+  function makeTower(signX, signZ, root) {
     const t = new THREE.Group();
 
     // =========================
@@ -40,9 +41,9 @@ export function createFloodlights({ pitchW = 105, pitchD = 68 } = {}) {
     t.add(arm);
 
     // =========================
-    // ✅ PANEL I MADH DREJTKENDSH
+    // PANEL
     // =========================
-    const panelGeo = new THREE.BoxGeometry(10.5, 3.0, 1.6); // BIGGER
+    const panelGeo = new THREE.BoxGeometry(10.5, 3.0, 1.6);
     const panelMat = new THREE.MeshStandardMaterial({
       color: 0x0e0e0e,
       roughness: 0.5,
@@ -56,25 +57,23 @@ export function createFloodlights({ pitchW = 105, pitchD = 68 } = {}) {
     t.add(panel);
 
     // =========================
-    // ✅ 3 SPOTLIGHTS (ma shumë impact në fushë)
+    // 3 SPOTLIGHTS
     // =========================
     const baseSpot = new THREE.SpotLight(
       0xffffff,
       0,              // OFF fillimisht
       520,            // distance
-      Math.PI / 6.2,  // angle (ma i gjanë)
+      Math.PI / 6.2,  // angle
       0.25,
       1.0
     );
 
-    // decay (nëse e përkrah versioni yt)
     baseSpot.decay = 1;
 
     const spot1 = baseSpot;
     const spot2 = baseSpot.clone();
     const spot3 = baseSpot.clone();
 
-    // pozicionet te paneli
     spot1.position.set(-signX * 10.7, towerH - 4.5, 0.55);
     spot2.position.set(-signX * 10.7, towerH - 4.5, -0.55);
     spot3.position.set(-signX * 10.7, towerH - 4.2, 0.0);
@@ -88,18 +87,19 @@ export function createFloodlights({ pitchW = 105, pitchD = 68 } = {}) {
     spot3.shadow.mapSize.set(1024, 1024);
 
     // =========================
-    // TARGETS (ku bien dritat)
+    // ✅ TARGETS (WORLD) — KJO ËSHT FIX-I
     // =========================
     const target1 = new THREE.Object3D();
     const target2 = new THREE.Object3D();
     const target3 = new THREE.Object3D();
 
-    // qendra + dy zona anash (me e ndriçu pitch-in qartë)
+    // vendos target-at në botë (jo në t)
+    // qendra + zona brenda pitch-it
     target1.position.set(0, 0, 0);
-    target2.position.set(signX * (pitchW * -0.20), 0, signZ * (pitchD * -0.10));
-    target3.position.set(signX * (pitchW * -0.05), 0, signZ * (pitchD * 0.20));
+    target2.position.set(-signX * pitchW * 0.20, 0, -signZ * pitchD * 0.10);
+    target3.position.set(-signX * pitchW * 0.05, 0,  signZ * pitchD * 0.20);
 
-    t.add(target1, target2, target3);
+    root.add(target1, target2, target3);
 
     spot1.target = target1;
     spot2.target = target2;
@@ -108,9 +108,9 @@ export function createFloodlights({ pitchW = 105, pitchD = 68 } = {}) {
     t.add(spot1, spot2, spot3);
 
     // =========================
-    // ✅ “Bulb” i madh që shihet
+    // “Bulb” që shihet
     // =========================
-    const bulbGeo = new THREE.PlaneGeometry(3.2, 1.4);
+    const bulbGeo = new THREE.PlaneGeometry(6.0, 2.6);
     const bulbMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       emissive: new THREE.Color(0xffffff),
@@ -121,7 +121,7 @@ export function createFloodlights({ pitchW = 105, pitchD = 68 } = {}) {
     });
 
     const bulb = new THREE.Mesh(bulbGeo, bulbMat);
-    bulb.position.set(-signX * 8.2, towerH - 4.5, 0.86);
+    bulb.position.set(-signX * 8.2, towerH - 4.5, 1.05);
     bulb.rotation.y = signX > 0 ? Math.PI : 0;
     t.add(bulb);
 
@@ -135,31 +135,30 @@ export function createFloodlights({ pitchW = 105, pitchD = 68 } = {}) {
       bulbMat,
       setOn(on) {
         if (on) {
-          // ✅ SHUM FORT
-          spot1.intensity = 8.5;
-          spot2.intensity = 7.0;
-          spot3.intensity = 6.0;
+          spot1.intensity = 50.5;
+          spot2.intensity = 50.0;
+          spot3.intensity = 50.0;
           bulbMat.emissiveIntensity = 3.5;
         } else {
           spot1.intensity = 0.0;
           spot2.intensity = 0.0;
           spot3.intensity = 0.0;
-          bulbMat.emissiveIntensity = 0.0;
+          bulbMat.emissiveIntensity = 0.1;
         }
       },
     };
 
-    // pozicioni i kullës
+    // pozicioni i kullës + orientimi
     t.position.set(signX * towerOffsetX, 0, signZ * towerOffsetZ);
     t.lookAt(0, 0, 0);
 
     return t;
   }
 
-  const t1 = makeTower(+1, +1);
-  const t2 = makeTower(-1, +1);
-  const t3 = makeTower(+1, -1);
-  const t4 = makeTower(-1, -1);
+  const t1 = makeTower(+1, +1, g);
+  const t2 = makeTower(-1, +1, g);
+  const t3 = makeTower(+1, -1, g);
+  const t4 = makeTower(-1, -1, g);
 
   g.add(t1, t2, t3, t4);
 
@@ -167,6 +166,7 @@ export function createFloodlights({ pitchW = 105, pitchD = 68 } = {}) {
     towers: [t1, t2, t3, t4],
     setOn(on) {
       for (const t of g.userData.towers) t.userData.setOn(on);
+      g.updateMatrixWorld(true);
     },
   };
 

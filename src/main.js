@@ -4,14 +4,13 @@ import camera from "./core/camera.js";
 import renderer from "./core/renderer.js";
 import { setupResize } from "./utils/resize.js";
 import { createStadium } from "./world/stadium.js";
-import { setupLights } from "./world/lights.js";
-
+// import { setupLights } from "./world/lights.js"; // ❌ mos e thirr, se po shton drita ekstra
 
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as THREE from "three";
 
 // --------------------
-// Lights (base scene)
+// Lights (base scene) ✅ (kto i kontrollon me N)
 // --------------------
 const ambient = new THREE.AmbientLight(0xffffff, 0.65);
 scene.add(ambient);
@@ -25,8 +24,7 @@ scene.add(dir);
 
 let isNight = false;
 
-setupLights(scene);
-
+// ❌ setupLights(scene);  // MOS e thirr (se krijon ambient+sun tjera)
 
 // --------------------
 // Controls
@@ -74,8 +72,8 @@ function getStadium() {
 function applyNightDay() {
   // ✅ mos e “vrit” krejt skenën
   if (isNight) {
-    ambient.intensity = 0.40;
-    dir.intensity = 0.55;
+    ambient.intensity = 0.25;
+    dir.intensity = 0.15;
   } else {
     ambient.intensity = 0.65;
     dir.intensity = 1.0;
@@ -130,9 +128,17 @@ function animate() {
   controls.update();
 
   const dt = clock.getDelta();
-  const sb = getScoreboard();
-  sb?.userData?.update?.(dt);
 
-  renderer.render(scene, camera);
+// update scoreboard
+const sb = getScoreboard();
+sb?.userData?.update?.(dt);
+
+// ✅ update stadium (flags + players + qka t’kesh lidhë aty)
+const st = getStadium();
+st?.userData?.update?.(dt);
+
+renderer.render(scene, camera);
+
+
 }
 animate();
