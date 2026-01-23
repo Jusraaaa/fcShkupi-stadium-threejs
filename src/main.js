@@ -4,7 +4,9 @@ import camera from "./core/camera.js";
 import renderer from "./core/renderer.js";
 import { setupResize } from "./utils/resize.js";
 import { createStadium } from "./world/stadium.js";
-// import { setupLights } from "./world/lights.js"; // ❌ mos e thirr, se po shton drita ekstra
+import { EXRLoader } from "three/examples/jsm/loaders/EXRLoader.js";
+import { createCity } from "./world/city.js";
+
 
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import * as THREE from "three";
@@ -24,7 +26,50 @@ scene.add(dir);
 
 let isNight = false;
 
-// ❌ setupLights(scene);  // MOS e thirr (se krijon ambient+sun tjera)
+// ✅ ruaj HDRI e ditës këtu (që me mujt me e kthy prap)
+let dayHDRI = null;
+
+
+
+// --------------------
+// HDRI (Day Sky) ✅
+// --------------------
+scene.background = new THREE.Color(0x87b7ff); // fallback nëse HDRI s'osht loaded ende
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+
+new EXRLoader().load("/hdri/day.exr", (tex) => {
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+
+  const envMap = pmrem.fromEquirectangular(tex).texture;
+
+  scene.environment = envMap;       // reflektime/ndriçim
+  scene.environmentIntensity = 0.35;
+
+  dayHDRI = tex;                    // ✅ ruaje
+  scene.background = tex;           // ✅ ditë = HDRI sky
+
+  // ⛔ MOS e dispose tex, se na duhet për me e kthy prap ditën
+  pmrem.dispose();
+
+  // nëse je në night kur e load-on HDRI, mos e prish night background
+  applyNightDay();
+});
+
+// --------------------
+// Sky Dome (mbyll botën)
+// --------------------
+const skyGeo = new THREE.SphereGeometry(800, 32, 16);
+const skyMat = new THREE.MeshBasicMaterial({
+  color: 0x9fd3ff,
+  side: THREE.BackSide,
+  transparent: true,
+  opacity: 0.10, // 0 = s’e mbulon HDRI
+});
+const skyDome = new THREE.Mesh(skyGeo, skyMat);
+scene.add(skyDome);
+
 
 // --------------------
 // Controls
@@ -36,6 +81,10 @@ controls.dampingFactor = 0.08;
 controls.enableZoom = true;
 controls.minDistance = 15;
 controls.maxDistance = 200;
+
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.minPolarAngle = Math.PI * 0.08;
+
 
 controls.target.set(0, 5, 0);
 controls.update();
@@ -60,6 +109,14 @@ createStadium().then((stadium) => {
   st?.userData?.floodlights?.userData?.setOn(false);
 });
 
+// --------------------
+// City (rreth stadiumit) ✅
+// --------------------
+createCity({ pitchW: 105, pitchD: 68 }).then((city) => {
+  scene.add(city);
+});
+
+
 // Helpers
 function getScoreboard() {
   return scene.getObjectByName("Scoreboard");
@@ -70,13 +127,21 @@ function getStadium() {
 }
 
 function applyNightDay() {
-  // ✅ mos e “vrit” krejt skenën
   if (isNight) {
     ambient.intensity = 0.25;
     dir.intensity = 0.15;
+
+    scene.environmentIntensity = 0.12;
+    scene.background = new THREE.Color(0x05070d); // natë (dark)
+
   } else {
     ambient.intensity = 0.65;
     dir.intensity = 1.0;
+
+    scene.environmentIntensity = 0.35;
+
+    // ✅ ditë = ktheje HDRI prap (nëse është loaded), përndryshe fallback blue
+    scene.background = dayHDRI ?? new THREE.Color(0x87b7ff);
   }
 
   // ✅ ndiz/fik vetëm floodlights tona
@@ -129,16 +194,14 @@ function animate() {
 
   const dt = clock.getDelta();
 
-// update scoreboard
-const sb = getScoreboard();
-sb?.userData?.update?.(dt);
+  // update scoreboard
+  const sb = getScoreboard();
+  sb?.userData?.update?.(dt);
 
-// ✅ update stadium (flags + players + qka t’kesh lidhë aty)
-const st = getStadium();
-st?.userData?.update?.(dt);
+  // ✅ update stadium (flags + players + qka t’kesh lidhë aty)
+  const st = getStadium();
+  st?.userData?.update?.(dt);
 
-renderer.render(scene, camera);
-
-
+  renderer.render(scene, camera);
 }
 animate();
