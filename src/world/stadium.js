@@ -13,7 +13,7 @@ import { addDugouts } from "./stadiumModels.js";
 import { addWallsAndRoad } from "./stadiumEnvironment.js";
 import { createCornerFlags } from "./cornerFlags.js";
 import { createPlayers } from "./players.js";
-import { createCity } from "./city.js";
+
 
 
 export async function createStadium() {
@@ -128,11 +128,7 @@ export async function createStadium() {
     stadium.userData.players?.userData?.update?.(dt);
   };
 
-    // =========================
-  // CITY (assets rreth stadiumit)
-  // =========================
-  const city = await createCity({ pitchW, pitchD });
-  stadium.add(city);
+
 
 
   return stadium;
