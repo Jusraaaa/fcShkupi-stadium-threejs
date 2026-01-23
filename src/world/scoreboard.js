@@ -5,28 +5,32 @@ export function createScoreboard(pitchW, pitchD) {
   const group = new THREE.Group();
   group.name = "Scoreboard";
 
-  // ---- Canvas (LED screen) ----
+  // =========================
+  // CANVAS (LED SCREEN)
+  // =========================
   const canvas = document.createElement("canvas");
   canvas.width = 1024;
   canvas.height = 256;
+
   const ctx = canvas.getContext("2d");
-
   const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
 
-  // stable filtering (no shimmering blocks)
+  // ✅ ngjyrat e canvas-it në sRGB (për toneMapping/HDRI)
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  // stable filtering (pa “shimmer”)
   tex.generateMipmaps = false;
   tex.minFilter = THREE.LinearFilter;
   tex.magFilter = THREE.LinearFilter;
 
-  // Screen material (LED): not affected by lights, only visible from front
+  // Material i ekranit: MeshBasic (nuk ndikohet nga dritat)
   const screenMat = new THREE.MeshBasicMaterial({
     map: tex,
     toneMapped: false,
     side: THREE.FrontSide,
   });
 
-  // ✅ Z-fighting killer
+  // ✅ Z-fighting killer (ekrani mos me u “ngjit” me frame)
   screenMat.polygonOffset = true;
   screenMat.polygonOffsetFactor = -2;
   screenMat.polygonOffsetUnits = -2;
@@ -38,28 +42,32 @@ export function createScoreboard(pitchW, pitchD) {
     side: THREE.DoubleSide,
   });
 
-  // ---- Geometry ----
+  // =========================
+  // GEOMETRY (SCREEN + FRAME)
+  // =========================
   const screenGeo = new THREE.PlaneGeometry(14, 3.6);
   const screen = new THREE.Mesh(screenGeo, screenMat);
   screen.name = "ScoreboardScreen";
   screen.castShadow = false;
   screen.receiveShadow = false;
 
-  // pull screen slightly forward
+  // e sjell pak përpara (mos me u përplas me frame)
   screen.position.z = 0.36;
 
   const frameGeo = new THREE.BoxGeometry(15.2, 4.6, 0.7);
   const frame = new THREE.Mesh(frameGeo, frameMat);
   frame.name = "ScoreboardFrame";
 
-  // push frame backward
+  // e shtyn frame pak mbrapa
   frame.position.z = -0.6;
   frame.castShadow = true;
   frame.receiveShadow = true;
 
   group.add(screen, frame);
 
-  // ---- Back cover (mbyll pjesën e pasme, e ngjitur saktë) ----
+  // =========================
+  // BACK COVER (mbyll prapa)
+  // =========================
   const frameDepth = frameGeo.parameters.depth; // 0.7
 
   const backGeo = new THREE.PlaneGeometry(14, 3.6);
@@ -72,7 +80,7 @@ export function createScoreboard(pitchW, pitchD) {
 
   const backCover = new THREE.Mesh(backGeo, backMat);
 
-  // vendose fiks në faqen e pasme të frame-it
+  // vendoset fiks në faqen e pasme të frame-it
   backCover.position.z = frame.position.z - frameDepth / 2 - 0.01;
   backCover.rotation.y = Math.PI;
 
@@ -81,17 +89,22 @@ export function createScoreboard(pitchW, pitchD) {
 
   group.add(backCover);
 
-  // Optional glow (nice at night)
+  // =========================
+  // OPTIONAL GLOW (nice at night)
+  // =========================
   const glow = new THREE.PointLight(0xffffff, 0.45, 25);
   glow.position.set(0, 0, 1.8);
   group.add(glow);
 
-  // ---- Poles ----
+  // =========================
+  // POLES
+  // =========================
   const poleGeo = new THREE.CylinderGeometry(0.22, 0.22, 7, 16);
   const poleMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
 
   const poleL = new THREE.Mesh(poleGeo, poleMat);
   poleL.position.set(-6, -5.5, -0.1);
+
   const poleR = poleL.clone();
   poleR.position.x = 6;
 
@@ -100,11 +113,15 @@ export function createScoreboard(pitchW, pitchD) {
 
   group.add(poleL, poleR);
 
-  // Position behind goal, facing pitch
+  // =========================
+  // POSITION (behind goal)
+  // =========================
   group.position.set(0, 10.2, -(pitchD / 2 + 7));
   group.lookAt(0, 10, 0);
 
-  // ---- State ----
+  // =========================
+  // STATE
+  // =========================
   const state = {
     mode: 0, // 0 LOGO, 1 SCORE, 2 GOAL
     home: "FC SHKUPI",
@@ -116,7 +133,9 @@ export function createScoreboard(pitchW, pitchD) {
     logoImg: null,
   };
 
-  // Load logo
+  // =========================
+  // LOAD LOGO (nga /public)
+  // =========================
   const img = new Image();
   img.src = "/fcshkupi.png";
   img.onload = () => {
@@ -124,7 +143,9 @@ export function createScoreboard(pitchW, pitchD) {
     draw();
   };
 
-  // ---- Canvas helpers ----
+  // =========================
+  // CANVAS HELPERS
+  // =========================
   function beginFrame() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.globalAlpha = 1;
@@ -145,7 +166,7 @@ export function createScoreboard(pitchW, pitchD) {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // subtle scanlines
+    // scanlines subtile
     ctx.globalAlpha = 0.08;
     ctx.fillStyle = "#000";
     for (let y = 0; y < canvas.height; y += 4) {
@@ -252,7 +273,9 @@ export function createScoreboard(pitchW, pitchD) {
   // initial draw
   draw();
 
-  // ---- API ----
+  // =========================
+  // API (per main.js)
+  // =========================
   group.userData.clickable = [screen, frame];
 
   group.userData.toggleMode = () => {
@@ -273,13 +296,15 @@ export function createScoreboard(pitchW, pitchD) {
   };
 
   group.userData.update = (dt) => {
+    // ✅ mbaje time clean (pa “mikro-decimals”)
     state.seconds += dt;
+
     state.blink += dt * 10.0;
 
-    // subtle glow animation
+    // glow i lehtë
     glow.intensity = 0.4 + 0.12 * Math.sin(state.blink * 0.8);
 
-    // only GOAL needs continuous redraw
+    // vetëm GOAL ka nevojë me u redraw vazhdimisht
     if (state.mode === 2) draw();
   };
 

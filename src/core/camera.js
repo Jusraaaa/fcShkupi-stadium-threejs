@@ -4,7 +4,7 @@ import * as THREE from "three";
 const camera = new THREE.PerspectiveCamera(
   60, // FOV
   window.innerWidth / window.innerHeight,
-  0.1,  // near
+  0.5,  // near
   1000  // far
 );
 

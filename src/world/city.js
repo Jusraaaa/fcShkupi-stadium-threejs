@@ -2,7 +2,7 @@
 import * as THREE from "three";
 import { loadGLTF } from "./models.js";
 
-// Helpers
+// Random helpers
 function rand(a, b) {
   return a + Math.random() * (b - a);
 }
@@ -14,7 +14,9 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
   const g = new THREE.Group();
   g.name = "City";
 
-  // ✅ Files te: public/models/city/
+  // =========================
+  // MODELS (nga public/)
+  // =========================
   const buildingFiles = [
     "/models/city/building-type-a.glb",
     "/models/city/building-type-d.glb",
@@ -29,47 +31,45 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
   const drivewayFiles = ["/models/city/driveway-long.glb", "/models/city/driveway-short.glb"];
 
   // =========================
-  // Materials (Reusable)
+  // MATERIALS (vetëm për objekte pa texture)
+  // - Building: e lemë ORIGJINAL që me dal texture e GLB-së
   // =========================
   function makeMat(color, { roughness = 0.95, metalness = 0.0 } = {}) {
     return new THREE.MeshStandardMaterial({ color, roughness, metalness });
   }
 
-  // ✅ PERFORMANCE: reuse i materialeve (mos clone per çdo mesh)
-  // Clone() krijon shumë materiale -> rrit CPU/GPU + e ngadalëson reload.
   const treeMat = makeMat(0x2f8f2f, { roughness: 1.0, metalness: 0.0 });
-  treeMat.side = THREE.DoubleSide;
-
   const fenceMat = makeMat(0x1f2937, { roughness: 0.9, metalness: 0.05 });
-  fenceMat.side = THREE.DoubleSide;
-
   const drivewayMat = makeMat(0x3a3a3a, { roughness: 1.0, metalness: 0.0 });
-  drivewayMat.side = THREE.DoubleSide;
 
   function applyMaterial(root, mat) {
     root.traverse((o) => {
       if (o.isMesh || o.isSkinnedMesh) {
         o.castShadow = true;
         o.receiveShadow = true;
-        o.material = mat; // ✅ reuse (no clone)
+
+        // Mbuloje me material të thjeshtë (për drunj/fence/driveway)
+        o.material = mat.clone();
+        o.material.side = THREE.DoubleSide;
+        o.material.needsUpdate = true;
       }
     });
   }
 
   // =========================
-  // Cache / preload (mos i reload-on modelet çdo herë)
+  // CACHE (mos i reload modelet 100 herë)
   // =========================
   const cache = new Map();
 
   async function getModel(path, kind) {
     if (!cache.has(path)) {
-      cache.set(path, loadGLTF(path)); // loader yt kthen { scene, animations }
+      // resourcePath ndihmon për textures të brendshme të GLB
+      cache.set(path, loadGLTF(path, { resourcePath: "/models/city/" }));
     }
 
     const gltf = await cache.get(path);
     const root = gltf.scene.clone(true);
 
-    // ✅ Vendosim materiale vetëm te objekte që s’kanë texture të rëndësishme
     if (kind === "tree") {
       applyMaterial(root, treeMat);
     } else if (kind === "fence") {
@@ -77,7 +77,7 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
     } else if (kind === "driveway") {
       applyMaterial(root, drivewayMat);
     } else if (kind === "building") {
-      // ✅ Buildings: mos i prek materialet -> me i dal textures origjinale (colormap.png)
+      // ✅ Building: MOS ia ndrysho materialin -> ruaj texture origjinale
       root.traverse((o) => {
         if (o.isMesh || o.isSkinnedMesh) {
           o.castShadow = true;
@@ -90,11 +90,10 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
   }
 
   // =========================
-  // Stadium NO-SPAWN zone
+  // NO-SPAWN ZONE (stadiumi + buffer)
   // =========================
   const margin = 18;
 
-  // ✅ BUFFER i madh rreth stadiumit (mos me hy city brenda tribunave/rrugës)
   const BLOCK = {
     minX: -(pitchW / 2 + margin + 80),
     maxX: +(pitchW / 2 + margin + 80),
@@ -107,9 +106,9 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
   }
 
   // =========================
-  // Ring spawn rreth stadiumit
+  // RING spawn rreth stadiumit
+  // (që mos me dalin “shum larg”)
   // =========================
-  // ✅ City shfaqet si "unazë" rreth stadiumit (jo random larg), për pamje ma reale
   const innerR = Math.max(pitchW, pitchD) * 0.65 + margin + 55;
   const outerR = innerR + 170;
 
@@ -123,20 +122,19 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
     let x = 0, z = 0;
     for (let tries = 0; tries < 140; tries++) {
       const p = randomPosInRing();
-      x = p.x;
-      z = p.z;
+      x = p.x; z = p.z;
       if (!isInsideBlockedZone(x, z)) return { x, z };
     }
     return { x, z };
   }
 
   // =========================
-  // Ground
+  // GROUND
   // =========================
   const groundGeo = new THREE.PlaneGeometry(1200, 1200);
   const groundMat = makeMat(0x2f3b2f, { roughness: 1, metalness: 0 });
 
-  // ✅ Avoid z-fighting me elemente tjera afër tokës
+  // polygonOffset = mos me u “z-fight” me objekte tjera
   groundMat.polygonOffset = true;
   groundMat.polygonOffsetFactor = 1;
   groundMat.polygonOffsetUnits = 1;
@@ -148,7 +146,7 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
   g.add(ground);
 
   // =========================
-  // Buildings
+  // BUILDINGS
   // =========================
   const buildingCount = 12;
   for (let i = 0; i < buildingCount; i++) {
@@ -158,13 +156,15 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
     const { x, z } = findSafeSpot();
     m.position.set(x, 0, z);
     m.rotation.y = rand(0, Math.PI * 2);
-    m.scale.setScalar(rand(14.5, 18.0));
+
+    const s = rand(14.5, 18.0);
+    m.scale.setScalar(s);
 
     g.add(m);
   }
 
   // =========================
-  // Trees
+  // TREES
   // =========================
   const treeCount = 26;
   for (let i = 0; i < treeCount; i++) {
@@ -174,13 +174,15 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
     const { x, z } = findSafeSpot();
     t.position.set(x, 0, z);
     t.rotation.y = rand(0, Math.PI * 2);
-    t.scale.setScalar(rand(20.0, 22.2));
+
+    const s = rand(20.0, 22.2);
+    t.scale.setScalar(s);
 
     g.add(t);
   }
 
   // =========================
-  // Driveways
+  // DRIVEWAYS
   // =========================
   const drivewayCount = 7;
   for (let i = 0; i < drivewayCount; i++) {
@@ -196,7 +198,7 @@ export async function createCity({ pitchW = 105, pitchD = 68 } = {}) {
   }
 
   // =========================
-  // Fence ring (afër stadiumit)
+  // FENCE RING afër stadiumit
   // =========================
   const fenceBase = await getModel(pick(fenceFiles), "fence");
   fenceBase.scale.setScalar(8);

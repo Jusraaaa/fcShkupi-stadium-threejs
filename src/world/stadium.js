@@ -9,18 +9,13 @@ import { createFloodlights } from "./floodlights.js";
 import { createAssets } from "./stadiumAssets.js";
 import { createGroundAndPitch } from "./stadiumPitch.js";
 import { createLongStands } from "./stadiumStands.js";
-import { addDugouts } from "./stadiumModels.js";
 import { addWallsAndRoad } from "./stadiumEnvironment.js";
 import { createCornerFlags } from "./cornerFlags.js";
 import { createPlayers } from "./players.js";
 
-
-
 export async function createStadium() {
   const stadium = new THREE.Group();
   stadium.name = "ChairStadium";
-
-  
 
   // =========================
   // TOGGLES
@@ -61,7 +56,7 @@ export async function createStadium() {
   });
 
   stadium.add(createPitchLines(pitchW, pitchD));
-  stadium.add(createGoals(pitchW, pitchD));
+  stadium.add(createGoals(pitchW));
 
   // =========================
   // CORNER FLAGS
@@ -104,32 +99,24 @@ export async function createStadium() {
   floods.userData.setOn(false);
 
   // =========================
-  // DUGOUTS
-  // =========================
-  await addDugouts({ stadium, pitchD });
-
-  // =========================
   // WALLS + ROAD
   // =========================
   addWallsAndRoad({ stadium, pitchW, pitchD, margin });
 
   // =========================
-  // PLAYERS (FBX + anim)
+  // PLAYERS
   // =========================
   const players = await createPlayers({ pitchW, pitchD });
   stadium.add(players);
   stadium.userData.players = players;
 
   // =========================
-  // GLOBAL UPDATE (FLAGS + PLAYERS)
+  // GLOBAL UPDATE
   // =========================
   stadium.userData.update = (dt) => {
     stadium.userData.flags?.userData?.update?.(dt);
     stadium.userData.players?.userData?.update?.(dt);
   };
-
-
-
 
   return stadium;
 }

@@ -6,13 +6,16 @@ const renderer = new THREE.WebGLRenderer({
 });
 
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(window.devicePixelRatio);
 
-// ✅ këto 3 rreshta për tekstura / PBR
+// ✅ LIMIT pixel ratio (kritike për performance + Vercel)
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+
+// ✅ PBR / color pipeline
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.3;
 
+// ✅ Shadows
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 

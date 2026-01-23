@@ -2,11 +2,13 @@
 import * as THREE from "three";
 import { loadFBX, loadGLTF } from "./models.js";
 
+// =========================
+// Texture për topin (checker)
+// =========================
 function createCheckerTexture(size = 256, squares = 10) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = size;
   const ctx = canvas.getContext("2d");
-
   const s = size / squares;
 
   for (let y = 0; y < squares; y++) {
@@ -23,7 +25,6 @@ function createCheckerTexture(size = 256, squares = 10) {
   return tex;
 }
 
-
 export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
   const g = new THREE.Group();
   g.name = "Players";
@@ -31,16 +32,16 @@ export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
   const mixers = [];
 
   // =========================
-  // Uniform materials (maicë + shorts) -> mos me u dok "cullak"
+  // Uniform materials (maicë + shorts)
   // =========================
   const jerseyMat = new THREE.MeshStandardMaterial({
-    color: 0x0b3d91, // blu
+    color: 0x0b3d91,
     roughness: 0.8,
     metalness: 0.0,
   });
 
   const shortsMat = new THREE.MeshStandardMaterial({
-    color: 0x111111, // e zezë/errët
+    color: 0x111111,
     roughness: 0.9,
     metalness: 0.0,
   });
@@ -58,7 +59,7 @@ export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
 
       const name = (o.name || "").toLowerCase();
 
-      // heuristikë e thjeshtë: këmbë/pant/short -> shorts
+      // Heuristikë: pjesët e poshtme -> shorts
       const isShorts =
         name.includes("leg") ||
         name.includes("pant") ||
@@ -93,7 +94,7 @@ export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
     return mixer;
   }
 
-  // Auto-center + auto-ground + auto-scale (për GLB)
+  // GLB auto-center + ground + scale
   function fitCenterGround(root, { targetSize = 6 } = {}) {
     root.updateMatrixWorld(true);
 
@@ -103,11 +104,11 @@ export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
     box.getSize(size);
     box.getCenter(center);
 
-    // qendroje në (0,0,0) në X/Z
+    // qendroje në X/Z
     root.position.x += -center.x;
     root.position.z += -center.z;
 
-    // ground: minY = 0
+    // tokë: minY = 0
     root.updateMatrixWorld(true);
     const box2 = new THREE.Box3().setFromObject(root);
     root.position.y += -box2.min.y;
@@ -118,9 +119,9 @@ export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
     root.scale.multiplyScalar(s);
   }
 
-  // Spawn dummy clones (statik) për me mbush fushën
+  // Dummy clones (statik) për mbushje
   function spawnDummyFrom(source, pos, rotY, scale = 0.028) {
-    const d = source.clone(true); // statik (ok për mbushje)
+    const d = source.clone(true);
     d.position.copy(pos);
     d.rotation.y = rotY ?? 0;
     d.scale.setScalar(scale);
@@ -131,47 +132,34 @@ export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
   }
 
   // =========================
-  // Load Mixamo FBX players (pak ma të mëdhenj)
+  // Load FBX players (Mixamo)
   // =========================
-
-  // ✅ GOALKEEPER te GOLLI POSHT (afër kamerës)
   const goalkeeper = await loadFBX("/models/goalkeeper.fbx");
   setupScale(goalkeeper, 0.028);
   applyUniformMaterial(goalkeeper);
-
-  // golli poshtë është te z negativ -> -pitchD/2
   goalkeeper.position.set(0, 0, -pitchD / 2 + 5.5);
-
-  // le ta kqyr kah fusha (kah +Z)
   goalkeeper.rotation.y = 0;
-
   g.add(goalkeeper);
   playFirstAnimation(goalkeeper, goalkeeper.animations, { timeScale: 1.0 });
 
-  // DEFENDER – e sjellim gjithashtu në gjysmën e poshtme (mbrojtje)
   const defender = await loadFBX("/models/defender.fbx");
   setupScale(defender, 0.028);
   applyUniformMaterial(defender);
-
   defender.position.set(-10, 0, -pitchD / 2 + 16);
   defender.rotation.y = 0;
-
   g.add(defender);
   playFirstAnimation(defender, defender.animations, { timeScale: 1.0 });
 
-  // STRIKER – rreth mesit
   const striker = await loadFBX("/models/striker.fbx");
   setupScale(striker, 0.028);
   applyUniformMaterial(striker);
-
   striker.position.set(2, 0, -2);
   striker.rotation.y = -Math.PI / 2;
-
   g.add(striker);
   playFirstAnimation(striker, striker.animations, { timeScale: 1.0 });
 
   // =========================
-  // Load SoccerTrip GLB (ma i vogël)
+  // Load GLB player (SoccerTrip)
   // =========================
   try {
     const gltf = await loadGLTF("/models/SoccerTrip.glb");
@@ -179,16 +167,12 @@ export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
     sketch.name = "SoccerTrip";
 
     applyUniformMaterial(sketch);
-
-    // rrotullim (nëse del keq, ndërroje)
     sketch.rotation.set(0, Math.PI, 0);
 
-    // center/ground/scale (ma i vogël se Mixamo)
     sketch.position.set(0, 0, 0);
     sketch.scale.set(1, 1, 1);
     fitCenterGround(sketch, { targetSize: 4.5 });
 
-    // vendosje në mes (pak anash)
     sketch.position.set(12, 0.02, -2);
     g.add(sketch);
 
@@ -198,76 +182,66 @@ export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
   }
 
   // =========================
-  // Extra dummy players (mbush fushën)
+  // Extra dummy players
   // =========================
   spawnDummyFrom(defender, new THREE.Vector3(-2, 0, -2), 0, 0.028);
   spawnDummyFrom(striker, new THREE.Vector3(3, 0, 2), -Math.PI / 2, 0.028);
   spawnDummyFrom(defender, new THREE.Vector3(-6, 0, 6), Math.PI / 2, 0.028);
   spawnDummyFrom(striker, new THREE.Vector3(8, 0, 10), -Math.PI / 2, 0.028);
 
-  // ✅ afër gollit POSHT (jo te golli nalt)
   spawnDummyFrom(defender, new THREE.Vector3(-6, 0, -pitchD / 2 + 20), 0, 0.028);
   spawnDummyFrom(striker, new THREE.Vector3(6, 0, -pitchD / 2 + 22), 0, 0.028);
 
   // =========================
-  // Update loop
+  // FOOTBALL (topi)
+  // =========================
+  const ballGroup = new THREE.Group();
+  ballGroup.name = "Ball";
+
+  const ballGeo = new THREE.SphereGeometry(0.5, 32, 32);
+  const ballTex = createCheckerTexture(256, 10);
+
+  const ballMat = new THREE.MeshStandardMaterial({
+    map: ballTex,
+    roughness: 0.5,
+    metalness: 0.0,
+  });
+
+  const ball = new THREE.Mesh(ballGeo, ballMat);
+  ball.castShadow = true;
+  ball.receiveShadow = true;
+  ballGroup.add(ball);
+
+  // start në mes
+  ballGroup.position.set(0, 0.55, 0);
+  g.add(ballGroup);
+
+  // =========================
+  // PASS anim (A <-> B)
+  // =========================
+  const passA = new THREE.Vector3().copy(striker.position).add(new THREE.Vector3(0, 0.55, 0));
+  const passB = new THREE.Vector3().copy(defender.position).add(new THREE.Vector3(0, 0.55, 0));
+
+  let passT = 0;           // 0..1
+  let passDir = 1;         // 1 ose -1
+  const passSpeed = 0.35;  // shpejtësia
+
+  // =========================
+  // Update loop (mixers + ball)
   // =========================
   g.userData.update = (dt) => {
+    // animacionet e lojtarëve
     for (const m of mixers) m.update(dt);
 
-    // ====== Ball "pass" A <-> B ======
-  passT += dt * passSpeed * passDir;
+    // topi: lëvizje A <-> B
+    passT += dt * passSpeed * passDir;
+    if (passT >= 1) { passT = 1; passDir = -1; }
+    if (passT <= 0) { passT = 0; passDir = 1; }
 
-  if (passT >= 1) { passT = 1; passDir = -1; }
-  if (passT <= 0) { passT = 0; passDir = 1; }
-
-  // lëvizja lineare mes dy pikave
-  ballGroup.position.lerpVectors(passA, passB, passT);
-  ballGroup.position.y += Math.sin(passT * Math.PI) * 0.25; // hark i vogël
-
-  // rrotullim i lehtë që duket si top
-  ballGroup.rotation.y += dt * 3.0;
+    ballGroup.position.lerpVectors(passA, passB, passT);
+    ballGroup.position.y += Math.sin(passT * Math.PI) * 0.25; // hark i vogël
+    ballGroup.rotation.y += dt * 3.0; // rrotullim
   };
-
-  // =========================
-// FOOTBALL (topi bardhë/zi)
-// =========================
-const ballGroup = new THREE.Group();
-ballGroup.name = "Ball";
-
-// forma e topit
-const ballGeo = new THREE.SphereGeometry(0.5, 32, 32);
-
-const ballTex = createCheckerTexture(256, 10);
-
-const ballMat = new THREE.MeshStandardMaterial({
-  map: ballTex,
-  roughness: 0.5,
-  metalness: 0.0,
-});
-
-const ball = new THREE.Mesh(ballGeo, ballMat);
-ball.castShadow = true;
-ball.receiveShadow = true;
-ballGroup.add(ball);
-
-
-
-
-
-// pozita e topit (në mes të fushës)
-ballGroup.position.set(0, 0.55, 0);
-g.add(ballGroup);
-
-// pika A dhe B (mundesh me i ndrru kur të dush)
-const passA = new THREE.Vector3().copy(striker.position).add(new THREE.Vector3(0, 0.55, 0));
-const passB = new THREE.Vector3().copy(defender.position).add(new THREE.Vector3(0, 0.55, 0));
-
-let passT = 0;        // 0..1
-let passDir = 1;      // 1 ose -1
-const passSpeed = 0.35; // sa shpejt (ndërroje)
-
-
 
   return g;
 }

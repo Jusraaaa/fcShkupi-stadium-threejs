@@ -2,28 +2,63 @@
 import * as THREE from "three";
 
 export function addWallsAndRoad({ stadium, pitchW, pitchD, margin } = {}) {
-  // MURE
-  const endWallMat = new THREE.MeshStandardMaterial({ color: 0x1f2937 });
-  const endWallGeo = new THREE.BoxGeometry(1.2, 3, pitchD + margin * 2 + 6);
+  if (!stadium) return;
 
-  const wallLeft = new THREE.Mesh(endWallGeo, endWallMat);
-  wallLeft.position.set(-(pitchW / 2 + margin), 1.5, 0);
+  // =========================
+  // WALL MATERIAL
+  // =========================
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: 0x1f2937,
+    roughness: 0.8,
+    metalness: 0.05,
+  });
+
+  // =========================
+  // SIDE WALLS (majtas / djathtas)
+  // =========================
+  const wallHeight = 3;
+  const wallThickness = 1.2;
+  const wallLength = pitchD + margin * 2 + 6;
+
+  const wallGeo = new THREE.BoxGeometry(
+    wallThickness,
+    wallHeight,
+    wallLength
+  );
+
+  // majtas
+  const wallLeft = new THREE.Mesh(wallGeo, wallMat);
+  wallLeft.position.set(-(pitchW / 2 + margin), wallHeight / 2, 0);
   wallLeft.castShadow = true;
   wallLeft.receiveShadow = true;
   stadium.add(wallLeft);
 
-  const wallRight = new THREE.Mesh(endWallGeo, endWallMat);
-  wallRight.position.set(pitchW / 2 + margin, 1.5, 0);
-  wallRight.castShadow = true;
-  wallRight.receiveShadow = true;
+  // djathtas
+  const wallRight = wallLeft.clone();
+  wallRight.position.x = pitchW / 2 + margin;
   stadium.add(wallRight);
 
-  // RRUGA
-  const roadGeo = new THREE.PlaneGeometry(pitchW + margin * 2 + 55, 10);
-  const roadMat = new THREE.MeshStandardMaterial({ color: 0x2b2b2b });
+  // =========================
+  // ROAD (pas stadiumit)
+  // =========================
+  const roadWidth = pitchW + margin * 2 + 55;
+  const roadDepth = 10;
+
+  const roadGeo = new THREE.PlaneGeometry(roadWidth, roadDepth);
+  const roadMat = new THREE.MeshStandardMaterial({
+    color: 0x2b2b2b,
+    roughness: 0.95,
+    metalness: 0.0,
+  });
+
   const road = new THREE.Mesh(roadGeo, roadMat);
   road.rotation.x = -Math.PI / 2;
-  road.position.set(0, -0.02, pitchD / 2 + margin + 18);
+
+  // pak poshtë për mos me pas z-fighting me terrenin
+  road.position.set(0, -0.03, pitchD / 2 + margin + 18);
+
   road.receiveShadow = true;
+  road.castShadow = false;
+
   stadium.add(road);
 }

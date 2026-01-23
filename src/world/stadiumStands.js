@@ -17,9 +17,58 @@ export async function createLongStands({
   const group = new THREE.Group();
   group.name = "LongStands";
 
-  function buildLongStand(side = "north") {
-    const zDir = side === "north" ? -1 : 1;
+  /**
+   * Ndihmës: kthen materialin e tribunës
+   * (nëse texture mungon, bie në ngjyrë)
+   */
+  function makeStandMaterial() {
+    if (USE_STAND_TEXTURE && concrete) {
+      return new THREE.MeshStandardMaterial({
+        map: concrete,
+        roughness: 0.9,
+        metalness: 0.0,
+        side: THREE.DoubleSide,
+      });
+    }
+    return new THREE.MeshStandardMaterial({
+      color: 0x2a2a2a,
+      roughness: 0.95,
+      metalness: 0.0,
+      side: THREE.DoubleSide,
+    });
+  }
 
+  /**
+   * Ndihmës: kthen materialin e çatisë
+   */
+  function makeRoofMaterial() {
+    if (USE_ROOF_TEXTURE && roofDiff) {
+      return new THREE.MeshStandardMaterial({
+        map: roofDiff,
+        roughness: 0.6,
+        metalness: 0.2,
+        side: THREE.DoubleSide,
+      });
+    }
+    return new THREE.MeshStandardMaterial({
+      color: 0x1b2333,
+      roughness: 0.35,
+      metalness: 0.65,
+      side: THREE.DoubleSide,
+    });
+  }
+
+  /**
+   * Krijon tribunën e gjatë (north/south)
+   */
+  function buildLongStand(side = "north") {
+    const isNorth = side === "north";
+    const zDir = isNorth ? -1 : 1; // north = z negativ, south = z pozitiv
+
+    // =========================
+    // SHAPE (profil i tribunës)
+    // =========================
+    // Profil: front i ulët (2.6m), mbrapa i lartë (standH)
     const standShape = new THREE.Shape();
     standShape.moveTo(0, 0);
     standShape.lineTo(standD, 0);
@@ -27,43 +76,41 @@ export async function createLongStands({
     standShape.lineTo(0, 2.6);
     standShape.lineTo(0, 0);
 
+    // Extrude në gjatësi (standXLen)
     const bodyGeo = new THREE.ExtrudeGeometry(standShape, {
       depth: standXLen,
       bevelEnabled: false,
       steps: 1,
     });
 
+    // rrotulloje që “depth” të bëhet në X
     bodyGeo.rotateY(-Math.PI / 2);
-    bodyGeo.center();
+    bodyGeo.center(); // origin në mes (na e bën pozicionimin ma të lehtë)
 
-    const bodyMat = USE_STAND_TEXTURE
-      ? new THREE.MeshStandardMaterial({
-          map: concrete,
-          roughness: 0.9,
-          metalness: 0.0,
-          side: THREE.DoubleSide,
-        })
-      : new THREE.MeshStandardMaterial({
-          color: 0x2a2a2a,
-          roughness: 0.95,
-          metalness: 0.0,
-          side: THREE.DoubleSide,
-        });
+    // =========================
+    // BODY (mesh i tribunës)
+    // =========================
+    const bodyMat = makeStandMaterial();
 
     const body = new THREE.Mesh(bodyGeo, bodyMat);
     body.name = `StandBody_${side}`;
     body.castShadow = true;
     body.receiveShadow = true;
 
-    body.rotation.y = side === "north" ? Math.PI : 0;
+    // north e kthen mbrapsht që “faqja” me i pa kah fusha
+    body.rotation.y = isNorth ? Math.PI : 0;
 
+    // vendos tribunën mbrapa vijës anësore (jashtë pitch)
     body.position.set(
       0,
       standH / 2,
       zDir * (pitchD / 2 + standGapFromPitch + standD / 2)
     );
 
-    // SEATS (child of body)
+    // =========================
+    // SEATS (brenda tribunës)
+    // =========================
+    // i lidhi si child të body -> lëvizin bashkë me tribunën
     const seats = createSeatsForLongStand(body, side, {
       seatRows: 14,
       xSpacing: 1.6,
@@ -71,6 +118,8 @@ export async function createLongStands({
       aisleCols: [12, 28, 44, 60],
       edgePaddingX: 2,
       midGapAuto: true,
+
+      // parametrat e slope/pozicionim (si i ke ti)
       standH: standH,
       standD: standD,
       standFrontY: 2.6,
@@ -84,35 +133,27 @@ export async function createLongStands({
     seats.name = `Seats_${side}`;
     body.add(seats);
 
-    // ROOF
+    // =========================
+    // ROOF (çatia)
+    // =========================
     const roofGeo = new THREE.BoxGeometry(standXLen + 10, 0.7, standD + 3);
-
-    const roofMat = USE_ROOF_TEXTURE
-      ? new THREE.MeshStandardMaterial({
-          map: roofDiff,
-          roughness: 0.6,
-          metalness: 0.2,
-          side: THREE.DoubleSide,
-        })
-      : new THREE.MeshStandardMaterial({
-          color: 0x1b2333,
-          roughness: 0.35,
-          metalness: 0.65,
-          side: THREE.DoubleSide,
-        });
+    const roofMat = makeRoofMaterial();
 
     const roof = new THREE.Mesh(roofGeo, roofMat);
     roof.name = `Roof_${side}`;
     roof.castShadow = true;
     roof.receiveShadow = true;
 
+    // pozicion roof lokal (brenda body)
     const roofY = standH / 2 + 6.5;
     const roofZLocal = standD / 2 + 2.4;
 
     roof.position.set(0, roofY, roofZLocal);
     body.add(roof);
 
-    // SUPPORTS
+    // =========================
+    // SUPPORTS (shtyllat e çatisë)
+    // =========================
     const supports = new THREE.Group();
     supports.name = `Supports_${side}`;
 
@@ -126,7 +167,15 @@ export async function createLongStands({
     const xMin = -(standXLen / 2) + 2;
     const xMax = standXLen / 2 - 2;
 
+    /**
+     * ✅ FIX i rëndësishëm:
+     * roof.position.z është “local” dhe për anën tjetër, me rotation mundet me t’dok “gabim”.
+     * Ne duam shtyllat me qenë fiks nën çati, pra përdorim roof.position.z (local),
+     * por e vendosim pa logjika të çuditshme; kjo punon edhe kur body rrotullohet.
+     */
     const supportZ = roof.position.z;
+
+    // nga dyshemeja lokale e tribunës deri nën çati
     const bottomY = -standH / 2 + 0.2;
     const topY = roof.position.y - 0.3;
     const postH = Math.max(0.2, topY - bottomY);
@@ -147,7 +196,9 @@ export async function createLongStands({
 
     body.add(supports);
 
-    // BEAMS (ti i kishe kriju, po s’i kishe add -> po e ruaj logjikën, veç e shtoj që mos me u humb)
+    // =========================
+    // BEAMS (trare) — i shtojmë realisht në scene (ti i kishe gati)
+    // =========================
     const beams = new THREE.Group();
     beams.name = `Beams_${side}`;
 
@@ -158,10 +209,15 @@ export async function createLongStands({
       metalness: 1.0,
     });
 
+    // vendos disa trare horizontal përgjatë tribunës
     for (let i = -5; i <= 5; i++) {
       const beam = new THREE.Mesh(beamGeo, beamMat);
       beam.rotation.z = Math.PI / 2;
       beam.position.set(i * 10, roof.position.y - 0.4, roof.position.z);
+
+      beam.castShadow = true;
+      beam.receiveShadow = true;
+
       beams.add(beam);
     }
 
@@ -170,6 +226,9 @@ export async function createLongStands({
     return body;
   }
 
+  // =========================
+  // BUILD BOTH SIDES
+  // =========================
   const northBody = buildLongStand("north");
   const southBody = buildLongStand("south");
 

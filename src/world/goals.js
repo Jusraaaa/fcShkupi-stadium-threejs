@@ -1,10 +1,11 @@
+// src/world/goals.js
 import * as THREE from "three";
 
 export function createGoals(pitchW = 105) {
   const group = new THREE.Group();
   group.name = "Goals";
 
-  // Madhësitë që po i përdor ti
+  // Madhësitë (si i ke vendos ti)
   const goalW = 10.32;
   const goalH = 4.44;
   const goalDepth = 2.8;
@@ -17,44 +18,36 @@ export function createGoals(pitchW = 105) {
   });
 
   // =========================
-  // ✅ NET TEXTURES (PATH OK)
+  // NET TEXTURES (Vite path)
   // =========================
   const loader = new THREE.TextureLoader();
 
-  const netColor = loader.load("/textures/goals/net_color.png");
+  // ✅ përdorim vetëm alpha për rrjetë “FORCE WHITE”
   const netAlpha = loader.load("/textures/goals/net_alpha.png");
 
-  // për Vite/Three: Color texture në sRGB
-  netColor.colorSpace = THREE.SRGBColorSpace;
-
-  // shpesh textures dalin të përmbysura
-  netColor.flipY = false;
+  // Nëse te ti del mirë kështu, mos e prek
   netAlpha.flipY = false;
 
-  // Repeat për katrorë më të vegjël
-  netColor.wrapS = netColor.wrapT = THREE.RepeatWrapping;
   netAlpha.wrapS = netAlpha.wrapT = THREE.RepeatWrapping;
+  netAlpha.repeat.set(3, 2.2);
 
-  netColor.repeat.set(3, 2.2);
-  netAlpha.repeat.copy(netColor.repeat);
-
-  // ✅ rrjeta e bardhë “FORCE WHITE”
-const netMat = new THREE.MeshBasicMaterial({
-  alphaMap: netAlpha,     // përdor vetëm transparencën
-  transparent: true,
-  opacity: 1,
-  alphaTest: 0.05,
-  side: THREE.DoubleSide,
-  color: 0xffffff,        // e bardhë
-  depthWrite: false,
-
-});
-
+  // ✅ rrjeta e bardhë me alphaMap
+  const netMat = new THREE.MeshBasicMaterial({
+    alphaMap: netAlpha,
+    transparent: true,
+    opacity: 1,
+    alphaTest: 0.05,
+    side: THREE.DoubleSide,
+    color: 0xffffff,
+    depthWrite: false, // rrjeta del ma “clean” (pa z-fighting)
+  });
 
   function oneGoal(xPos) {
     const g = new THREE.Group();
 
+    // =========================
     // Posts + crossbar
+    // =========================
     const postGeo = new THREE.CylinderGeometry(postR, postR, goalH, 20);
     const barGeo = new THREE.CylinderGeometry(postR, postR, goalW, 20);
 
@@ -75,7 +68,9 @@ const netMat = new THREE.MeshBasicMaterial({
 
     g.add(leftPost, rightPost, crossbar);
 
-    // ✅ NET (plane meshes)
+    // =========================
+    // NET (plane meshes)
+    // =========================
     const backNet = new THREE.Mesh(
       new THREE.PlaneGeometry(goalW, goalH, 20, 12),
       netMat
@@ -116,6 +111,7 @@ const netMat = new THREE.MeshBasicMaterial({
       pos.setZ(i, pos.getZ(i) - 0.25 * centerPull);
     }
     pos.needsUpdate = true;
+    backNet.geometry.computeVertexNormals(); // një herë (safe)
 
     g.add(backNet, leftNet, rightNet, topNet);
 
