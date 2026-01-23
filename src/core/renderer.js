@@ -13,7 +13,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 // ✅ PBR / color pipeline
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.3;
+renderer.toneMappingExposure = 1.9;
 
 // ✅ Shadows
 renderer.shadowMap.enabled = true;

@@ -53,7 +53,7 @@ export async function createPlayers({ pitchW = 105, pitchD = 68 } = {}) {
     root.traverse((o) => {
       if (!o.isMesh) return;
 
-      o.castShadow = true;
+      o.castShadow = false;
       o.receiveShadow = true;
       o.frustumCulled = false;
 

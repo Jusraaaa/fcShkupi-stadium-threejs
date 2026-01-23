@@ -78,6 +78,7 @@ scene.add(new THREE.Mesh(skyGeo, skyMat));
 // Controls
 // =========================
 const controls = new OrbitControls(camera, renderer.domElement);
+controls.enablePan = false;
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.minDistance = 15;
@@ -177,6 +178,12 @@ function animate() {
   const dt = clock.getDelta();
 
   controls.update();
+
+  // ✅ mos e le kamerën me ra nën tokë
+  if (camera.position.y < 1) camera.position.y = 1;
+
+  // ✅ edhe target-in mos e le nën tokë (se përndryshe kamera “zhytet”)
+  if (controls.target.y < 0.5) controls.target.y = 0.5;
   scoreboardRef?.userData?.update?.(dt);
   stadiumRef?.userData?.update?.(dt);
 
